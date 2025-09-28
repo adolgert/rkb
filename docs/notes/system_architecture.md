@@ -12,7 +12,7 @@ Proposed System Architecture: Research Knowledge Base (RKB)
 
   - **Experimental Flexibility**: Primary goal - easy experimentation with document subsets, embeddings, and search methods
   - **Separation of Concerns**: Each layer has a single responsibility
-  - **Project-Based Organization**: Documents can be grouped into research projects for focused experimentation
+  - **Project-Based Organization**: Documents can be logically grouped into research projects for focused experimentation (projects are filters, not data silos)
   - **Data Immutability**: Source documents never modified, all derivatives tracked
   - **Rebuild Capability**: System can be completely reconstructed from original PDFs
   - **Reproducibility**: All transformations are deterministic and logged
@@ -59,11 +59,11 @@ Proposed System Architecture: Research Knowledge Base (RKB)
   │  │  - doc_id, content_hash, arxiv_id, version           │  │
   │  │  - project_memberships, experiment_embeddings        │  │
   │  └──────────────────────────────────────────────────────┘  │
-  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────────┐  │
-  │  │  Source │  │Extracted│  │ Project │  │ Experiment  │  │
-  │  │   PDFs  │  │   Text  │  │ Vector  │  │  Vector     │  │
-  │  │         │  │         │  │   DBs   │  │    DBs      │  │
-  │  └─────────┘  └─────────┘  └─────────┘  └─────────────┘  │
+  │  ┌─────────┐  ┌─────────┐  ┌─────────────────────────┐  │
+  │  │  Source │  │Extracted│  │     Shared Vector       │  │
+  │  │   PDFs  │  │   Text  │  │     Database (Chroma)   │  │
+  │  │         │  │         │  │   (project_id filtering)│  │
+  │  └─────────┘  └─────────┘  └─────────────────────────┘  │
   └─────────────────────────────────────────────────────────────┘
 
   Package Component Specifications
@@ -202,7 +202,7 @@ Proposed System Architecture: Research Knowledge Base (RKB)
       embedder: "ollama-mxbai"
       chunk_size: 2000
       search_strategy: "semantic_only"
-      vector_db_path: "projects/hazard_models/embeddings/baseline"
+      vector_db_path: "rkb_chroma_db"  # Shared database with project filtering
       created_date: "2025-09-28T10:00:00Z"
 
     openai_comparison:
@@ -211,7 +211,7 @@ Proposed System Architecture: Research Knowledge Base (RKB)
       embedder: "openai-ada-002"
       chunk_size: 2000
       search_strategy: "semantic_only"
-      vector_db_path: "projects/hazard_models/embeddings/openai"
+      vector_db_path: "rkb_chroma_db"  # Shared database with project filtering
       created_date: "2025-09-28T11:00:00Z"
 
     hybrid_approach:
@@ -220,7 +220,7 @@ Proposed System Architecture: Research Knowledge Base (RKB)
       embedder: "ollama-mxbai"
       chunk_size: 1000
       search_strategy: "hybrid_bm25_semantic"
-      vector_db_path: "projects/hazard_models/embeddings/hybrid"
+      vector_db_path: "rkb_chroma_db"  # Shared database with project filtering
       created_date: "2025-09-28T12:00:00Z"
 
   # rkb/services/experiment_service.py
@@ -251,7 +251,7 @@ Proposed System Architecture: Research Knowledge Base (RKB)
           self.registry = DocumentRegistry()
           self.experiment_config = self._load_experiment_config(experiment_id)
           self.project_docs = self.registry.get_project_documents(project_id) if project_id else None
-          self.vector_db = self._connect_vector_db(self.experiment_config.vector_db)
+          self.vector_db = self._connect_vector_db("rkb_chroma_db")  # Shared database
 
       def search(self, query: str, filters: dict | None = None) -> list[SearchResult]:
           """Experiment-specific search with optional project filtering."""
@@ -385,11 +385,7 @@ Proposed System Architecture: Research Knowledge Base (RKB)
   │   ├── hazard_models/
   │   │   ├── documents.json          # Project document subset
   │   │   ├── experiments.yaml        # Project-specific experiments
-  │   │   ├── results/               # Experiment comparison results
-  │   │   └── embeddings/            # Project experiment vector DBs
-  │   │       ├── baseline/
-  │   │       ├── openai_comparison/
-  │   │       └── hybrid_approach/
+  │   │   └── results/               # Experiment comparison results
   │   ├── mcmc_diagnostics/
   │   └── time_series_analysis/
   │
@@ -397,7 +393,7 @@ Proposed System Architecture: Research Knowledge Base (RKB)
   │   ├── documents.db          # SQLite registry with projects
   │   ├── source_pdfs/          # Immutable original PDFs/LaTeX
   │   ├── extractions/          # Shared extracted text (MMD)
-  │   └── global_embeddings/    # Non-project-specific embeddings
+  │   └── rkb_chroma_db/        # Shared vector database for all projects
   │
   └── legacy/                   # Migration from prototype
       └── nugget/               # Original prototype code
@@ -426,7 +422,7 @@ Proposed System Architecture: Research Knowledge Base (RKB)
     - Support for PDF and LaTeX input files
     - Directory watching for new file detection
     - Multiple storage locations for large datasets
-    - ArXiv version tracking and deduplication
+    - Content-based deduplication
 
   5. **Package Architecture Benefits**
     - **Import enforcement**: import-linter prevents layer violations
