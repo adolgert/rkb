@@ -7,6 +7,7 @@ import pytest
 
 from rkb.core.models import (
     ChunkMetadata,
+    ChunkResult,
     Document,
     DocumentStatus,
     EmbeddingResult,
@@ -147,33 +148,83 @@ class TestEmbeddingResult:
         assert result.vector_db_path == Path("/test/chroma_db")
 
 
-class TestSearchResult:
-    """Tests for SearchResult model."""
+class TestChunkResult:
+    """Tests for ChunkResult model."""
 
-    def test_search_result_similarity_calculation(self):
-        """Test that similarity is calculated from distance."""
-        result = SearchResult(
-            doc_id="test-doc",
-            chunk_index=0,
+    def test_chunk_result_creation(self):
+        """Test creating a chunk result."""
+        result = ChunkResult(
+            chunk_id="chunk-1",
             content="Test content",
+            similarity=0.7,
             distance=0.3,
         )
 
-        assert result.similarity == pytest.approx(0.7)
+        assert result.chunk_id == "chunk-1"
+        assert result.content == "Test content"
+        assert result.similarity == 0.7
+        assert result.distance == 0.3
+        assert isinstance(result.metadata, dict)
 
-    def test_search_result_with_metadata(self):
-        """Test search result with metadata."""
-        metadata = ChunkMetadata(0, 100, True, 1, 2)
-        result = SearchResult(
-            doc_id="test-doc",
-            chunk_index=0,
+    def test_chunk_result_with_metadata(self):
+        """Test chunk result with metadata."""
+        metadata = {"doc_id": "test-doc", "chunk_index": 0, "has_equations": True}
+        result = ChunkResult(
+            chunk_id="chunk-1",
             content="Mathematical content",
+            similarity=0.8,
             distance=0.2,
             metadata=metadata,
         )
 
         assert result.metadata == metadata
-        assert result.metadata.has_equations is True
+        assert result.metadata["has_equations"] is True
+
+
+class TestSearchResult:
+    """Tests for SearchResult model."""
+
+    def test_search_result_creation(self):
+        """Test creating a search result."""
+        result = SearchResult(query="test query")
+
+        assert result.query == "test query"
+        assert isinstance(result.chunk_results, list)
+        assert len(result.chunk_results) == 0
+        assert result.total_results == 0
+        assert result.search_time == 0.0
+        assert isinstance(result.filters_applied, dict)
+        assert result.error_message is None
+
+    def test_search_result_with_chunks(self):
+        """Test search result with chunk results."""
+        chunk1 = ChunkResult(
+            chunk_id="chunk-1",
+            content="First result",
+            similarity=0.9,
+            distance=0.1,
+        )
+        chunk2 = ChunkResult(
+            chunk_id="chunk-2",
+            content="Second result",
+            similarity=0.8,
+            distance=0.2,
+        )
+
+        result = SearchResult(
+            query="test query",
+            chunk_results=[chunk1, chunk2],
+            total_results=2,
+            search_time=0.15,
+            filters_applied={"project_id": "proj-123"},
+        )
+
+        assert len(result.chunk_results) == 2
+        assert result.chunk_results[0].similarity == 0.9
+        assert result.chunk_results[1].similarity == 0.8
+        assert result.total_results == 2
+        assert result.search_time == 0.15
+        assert result.filters_applied["project_id"] == "proj-123"
 
 
 class TestExperimentConfig:
