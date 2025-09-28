@@ -254,6 +254,7 @@ class DocumentRegistry:
                     version=row['version'],
                     status=DocumentStatus(row['status']),
                     added_date=datetime.fromisoformat(row['added_date']),
+                    project_id=row['project_id'],
                 ))
 
         return documents
@@ -287,6 +288,7 @@ class DocumentRegistry:
                     version=row['version'],
                     status=DocumentStatus(row['status']),
                     added_date=datetime.fromisoformat(row['added_date']),
+                    project_id=row['project_id'],
                 ))
 
         return documents

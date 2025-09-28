@@ -44,6 +44,7 @@ class Document:
     version: int = 1
     parent_doc_id: str | None = None
     status: DocumentStatus = DocumentStatus.PENDING
+    project_id: str | None = None
 
     def __post_init__(self) -> None:
         """Convert string paths to Path objects."""
@@ -112,20 +113,43 @@ class EmbeddingResult:
 
 
 @dataclass
-class SearchResult:
-    """Single search result."""
+class ChunkResult:
+    """Single chunk search result."""
 
-    doc_id: str
-    chunk_index: int
+    chunk_id: str
     content: str
+    similarity: float
     distance: float
-    similarity: float = field(init=False)
-    metadata: ChunkMetadata | None = None
-    document: Document | None = None
+    metadata: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Calculate similarity from distance."""
-        self.similarity = 1 - self.distance if self.distance is not None else 0.0
+        """Validate chunk result."""
+        if self.similarity < 0 or self.similarity > 1:
+            self.similarity = max(0, min(1, self.similarity))
+
+
+@dataclass
+class SearchResult:
+    """Search result containing multiple chunks."""
+
+    query: str
+    chunk_results: list[ChunkResult] = field(default_factory=list)
+    total_results: int = 0
+    search_time: float = 0.0
+    filters_applied: dict = field(default_factory=dict)
+    error_message: str | None = None
+
+    def __post_init__(self) -> None:
+        """Update total_results from chunk_results if not set."""
+        if self.total_results == 0 and self.chunk_results:
+            self.total_results = len(self.chunk_results)
+
+    @property
+    def avg_score(self) -> float:
+        """Average similarity score across all chunks."""
+        if not self.chunk_results:
+            return 0.0
+        return sum(chunk.similarity for chunk in self.chunk_results) / len(self.chunk_results)
 
 
 @dataclass
@@ -134,7 +158,7 @@ class DocumentResult:
 
     document: Document
     best_score: float
-    chunk_results: list[SearchResult]
+    chunk_results: list[ChunkResult]
     total_chunks: int
 
     @property
@@ -150,7 +174,7 @@ class ComparisonResult:
     """Result from comparing multiple experiments."""
 
     query: str
-    experiment_results: dict[str, list[SearchResult]]
+    experiment_results: dict[str, dict[str, SearchResult]]
     metrics: dict[str, dict[str, float]] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.now)
 
@@ -160,11 +184,14 @@ class ProjectStats:
     """Statistics for a project."""
 
     project_id: str
-    document_count: int
-    extracted_count: int
-    indexed_count: int
-    failed_count: int
-    total_chunks: int
+    total_documents: int
+    pending_count: int = 0
+    extracting_count: int = 0
+    extracted_count: int = 0
+    indexing_count: int = 0
+    indexed_count: int = 0
+    failed_count: int = 0
+    total_chunks: int = 0
     available_experiments: list[str] = field(default_factory=list)
 
 
@@ -172,7 +199,7 @@ class ProjectStats:
 class ExperimentConfig:
     """Configuration for an experiment."""
 
-    experiment_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    experiment_id: str = field(default_factory=lambda: f"exp_{str(uuid.uuid4())[:8]}")
     project_id: str | None = None
     experiment_name: str | None = None
     extractor: str | None = None
