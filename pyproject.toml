@@ -89,6 +89,9 @@ ignore = ["A001", "ANN201", "ANN001", "ANN003", "B008", "BLE001", "COM812", "DTZ
 force-single-line = false
 known-first-party = ["rkb"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["SLF001", "ANN002", "ARG001"]
+
 [tool.importlinter]
 root_package = "rkb"
 
@@ -137,10 +140,8 @@ name = "No circular dependencies"
 type = "independence"
 modules = [
     "rkb.extractors.nougat_extractor",
-    "rkb.extractors.pymupdf_extractor",
-    "rkb.extractors.pandoc_extractor",
     "rkb.embedders.ollama_embedder",
-    "rkb.embedders.openai_embedder",
+    "rkb.embedders.chroma_embedder",
 ]
 
 [tool.pytest.ini_options]

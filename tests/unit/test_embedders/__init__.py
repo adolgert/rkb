@@ -1,0 +1,1 @@
+"""Embedder component tests."""

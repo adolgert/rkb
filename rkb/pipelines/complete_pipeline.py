@@ -1,0 +1,372 @@
+"""Complete pipeline for document discovery, processing, and indexing."""
+
+import json
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from rkb.core.document_registry import DocumentRegistry
+from rkb.pipelines.ingestion_pipeline import IngestionPipeline
+
+
+class CompletePipeline:
+    """Complete pipeline orchestrating document discovery and processing."""
+
+    def __init__(
+        self,
+        registry: DocumentRegistry | None = None,
+        extractor_name: str = "nougat",
+        embedder_name: str = "chroma",
+        project_id: str | None = None,
+    ):
+        """Initialize complete pipeline.
+
+        Args:
+            registry: Document registry for tracking documents
+            extractor_name: Name of extractor to use
+            embedder_name: Name of embedder to use
+            project_id: Project identifier for document organization
+        """
+        self.registry = registry or DocumentRegistry()
+        self.project_id = project_id or f"project_{int(time.time())}"
+
+        # Initialize ingestion pipeline
+        self.ingestion_pipeline = IngestionPipeline(
+            registry=self.registry,
+            extractor_name=extractor_name,
+            embedder_name=embedder_name,
+            project_id=self.project_id,
+        )
+
+    def find_recent_pdfs(
+        self,
+        data_dir: str | Path = "data/initial",
+        num_files: int = 50,
+        output_file: str | Path | None = None,
+    ) -> list[dict[str, Any]]:
+        """Find the most recent PDF files based on modification time.
+
+        Args:
+            data_dir: Directory to search for PDFs
+            num_files: Maximum number of files to return
+            output_file: Optional path to save file list as JSON
+
+        Returns:
+            List of file information dictionaries
+        """
+        data_path = Path(data_dir)
+        if not data_path.exists():
+            raise FileNotFoundError(f"Data directory not found: {data_path}")
+
+        print(f"🔍 Scanning for PDFs in: {data_path}")
+
+        # Find all PDF files
+        pdf_files = list(data_path.glob("*.pdf"))
+
+        if not pdf_files:
+            raise FileNotFoundError(f"No PDF files found in {data_path}")
+
+        print(f"📄 Found {len(pdf_files)} PDF files")
+
+        # Get file info with modification time
+        file_info = []
+        for pdf_file in pdf_files:
+            try:
+                stat = pdf_file.stat()
+                file_info.append({
+                    "path": str(pdf_file),
+                    "name": pdf_file.name,
+                    "size_mb": round(stat.st_size / (1024 * 1024), 2),
+                    "modified_time": stat.st_mtime,
+                    "modified_date": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                })
+            except Exception as e:
+                print(f"⚠ Error reading {pdf_file}: {e}")
+                continue
+
+        # Sort by modification time (most recent first)
+        file_info.sort(key=lambda x: x["modified_time"], reverse=True)
+
+        # Take the most recent files
+        recent_files = file_info[:num_files]
+
+        print(f"📅 Selected {len(recent_files)} most recent files:")
+        if recent_files:
+            print(f"   Newest: {recent_files[0]['name']} ({recent_files[0]['modified_date']})")
+            if len(recent_files) > 1:
+                print(f"   Oldest: {recent_files[-1]['name']} ({recent_files[-1]['modified_date']})")
+
+        # Calculate total size
+        total_size = sum(file["size_mb"] for file in recent_files)
+        print(f"💾 Total size: {total_size:.1f} MB")
+
+        # Save to JSON file if requested
+        if output_file:
+            output_path = Path(output_file)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(output_path, "w") as f:
+                json.dump(recent_files, f, indent=2)
+
+            print(f"💾 Saved file list to: {output_path}")
+
+        return recent_files
+
+    def run_pipeline(
+        self,
+        data_dir: str | Path = "data/initial",
+        num_files: int = 50,
+        max_pages: int = 15,
+        max_chunk_size: int = 2000,
+        force_reprocess: bool = False,
+        test_mode: bool = True,
+        log_file: str | Path | None = None,
+    ) -> dict[str, Any]:
+        """Run the complete PDF processing pipeline.
+
+        Args:
+            data_dir: Directory containing PDF files
+            num_files: Maximum number of files to process
+            max_pages: Maximum pages per PDF to process
+            max_chunk_size: Maximum size for text chunks
+            force_reprocess: Whether to reprocess existing documents
+            test_mode: Whether to run in test mode with reduced processing
+            log_file: Optional path to save processing log
+
+        Returns:
+            Dictionary with pipeline results and statistics
+        """
+        print("🚀 RKB Complete Processing Pipeline")
+        print("=" * 50)
+        print(f"📁 Source directory: {data_dir}")
+        print(f"📄 Number of files: {num_files}")
+        print(f"📖 Max pages per PDF: {max_pages}")
+        print(f"🔄 Force reprocess: {force_reprocess}")
+        print(f"🧪 Test mode: {test_mode}")
+        print(f"🗂 Project ID: {self.project_id}")
+        print()
+
+        start_time = time.time()
+        pipeline_results = {
+            "pipeline_config": {
+                "data_dir": str(data_dir),
+                "num_files": num_files,
+                "max_pages": max_pages,
+                "max_chunk_size": max_chunk_size,
+                "force_reprocess": force_reprocess,
+                "test_mode": test_mode,
+                "project_id": self.project_id,
+                "extractor": self.ingestion_pipeline.extractor_name,
+                "embedder": self.ingestion_pipeline.embedder_name,
+            },
+            "steps": {},
+            "success": False,
+        }
+
+        try:
+            # Step 1: Find recent PDFs
+            print("📋 Step 1: Finding recent PDFs...")
+            try:
+                recent_files = self.find_recent_pdfs(
+                    data_dir=data_dir,
+                    num_files=num_files,
+                )
+
+                if not recent_files:
+                    raise ValueError("No PDFs found")
+
+                pipeline_results["steps"]["find_files"] = {
+                    "success": True,
+                    "files_found": len(recent_files),
+                    "total_size_mb": sum(f["size_mb"] for f in recent_files),
+                }
+
+                print(f"✓ Found {len(recent_files)} recent PDFs")
+
+            except Exception as e:
+                pipeline_results["steps"]["find_files"] = {
+                    "success": False,
+                    "error": str(e),
+                }
+                print(f"✗ Error finding PDFs: {e}")
+                return pipeline_results
+
+            # Step 2: Process documents through ingestion pipeline
+            print("\n🔍 Step 2: Processing documents through ingestion pipeline...")
+            try:
+                # Limit files in test mode
+                files_to_process = recent_files[:3] if test_mode else recent_files
+
+                processing_results = self.ingestion_pipeline.process_batch(
+                    pdf_list=files_to_process,
+                    force_reprocess=force_reprocess,
+                    max_chunk_size=max_chunk_size,
+                    log_file=log_file,
+                )
+
+                # Count successes and failures
+                success_count = sum(1 for r in processing_results if r["status"] == "success")
+                error_count = sum(1 for r in processing_results if r["status"] == "error")
+                skip_count = sum(1 for r in processing_results if r["status"] == "skipped")
+
+                pipeline_results["steps"]["process_documents"] = {
+                    "success": success_count > 0,
+                    "total_files": len(files_to_process),
+                    "successful": success_count,
+                    "errors": error_count,
+                    "skipped": skip_count,
+                    "results": processing_results,
+                }
+
+                if success_count == 0:
+                    raise ValueError("No successful document processing")
+
+                print(f"✓ Processed {success_count}/{len(files_to_process)} documents")
+
+            except Exception as e:
+                pipeline_results["steps"]["process_documents"] = {
+                    "success": False,
+                    "error": str(e),
+                }
+                print(f"✗ Error during document processing: {e}")
+                return pipeline_results
+
+            # Step 3: Get processing statistics
+            print("\n📊 Step 3: Gathering processing statistics...")
+            try:
+                stats = self.ingestion_pipeline.get_processing_stats()
+                pipeline_results["steps"]["statistics"] = {
+                    "success": True,
+                    "stats": stats,
+                }
+
+                print("✓ Pipeline statistics gathered")
+                print(f"   Total documents: {stats['total_documents']}")
+                print(f"   Total extractions: {stats['total_extractions']}")
+                print(f"   Total embeddings: {stats['total_embeddings']}")
+                print(f"   Total chunks: {stats['total_chunks_embedded']}")
+
+            except Exception as e:
+                pipeline_results["steps"]["statistics"] = {
+                    "success": False,
+                    "error": str(e),
+                }
+                print(f"⚠ Error gathering statistics: {e}")
+
+            # Pipeline completion
+            end_time = time.time()
+            duration = end_time - start_time
+
+            pipeline_results.update({
+                "success": True,
+                "duration_seconds": round(duration, 1),
+                "timestamp": datetime.now().isoformat(),
+            })
+
+            # Print summary
+            print("\n🎉 Pipeline Summary")
+            print("=" * 50)
+            print(f"⏱ Total time: {duration:.1f} seconds")
+            print(f"📄 Files found: {pipeline_results['steps']['find_files']['files_found']}")
+
+            proc_stats = pipeline_results["steps"]["process_documents"]
+            print(f"📚 Documents processed: {proc_stats['successful']}/{proc_stats['total_files']}")
+            if proc_stats["errors"] > 0:
+                print(f"❌ Processing errors: {proc_stats['errors']}")
+            if proc_stats["skipped"] > 0:
+                print(f"⏭ Skipped: {proc_stats['skipped']}")
+
+            if "statistics" in pipeline_results["steps"] and pipeline_results["steps"]["statistics"]["success"]:
+                stats = pipeline_results["steps"]["statistics"]["stats"]
+                print(f"🗄 Total chunks indexed: {stats['total_chunks_embedded']}")
+
+            print(f"🗂 Project ID: {self.project_id}")
+            print()
+            print("🚀 Ready for semantic search!")
+
+            return pipeline_results
+
+        except Exception as e:
+            end_time = time.time()
+            duration = end_time - start_time
+
+            pipeline_results.update({
+                "success": False,
+                "duration_seconds": round(duration, 1),
+                "error": str(e),
+                "timestamp": datetime.now().isoformat(),
+            })
+
+            print(f"\n❌ Pipeline failed after {duration:.1f} seconds: {e}")
+            return pipeline_results
+
+    def validate_prerequisites(self, data_dir: str | Path = "data/initial") -> bool:
+        """Check that all required components are available.
+
+        Args:
+            data_dir: Directory to check for PDF files
+
+        Returns:
+            True if all prerequisites are met
+        """
+        print("🔧 Checking prerequisites...")
+
+        # Check data directory
+        data_path = Path(data_dir)
+        if not data_path.exists():
+            print(f"✗ Data directory not found: {data_path}")
+            return False
+
+        pdf_count = len(list(data_path.glob("*.pdf")))
+        if pdf_count == 0:
+            print(f"✗ No PDF files found in {data_path}")
+            return False
+
+        print(f"✓ Found {pdf_count} PDFs in data directory")
+
+        # Check extractor
+        try:
+            extractor = self.ingestion_pipeline.extractor
+            capabilities = extractor.get_capabilities()
+            print(f"✓ Extractor '{extractor.name}' is available")
+        except Exception as e:
+            print(f"✗ Extractor check failed: {e}")
+            return False
+
+        # Check embedder
+        try:
+            embedder = self.ingestion_pipeline.embedder
+            capabilities = embedder.get_capabilities()
+            print(f"✓ Embedder '{embedder.name}' is available")
+        except Exception as e:
+            print(f"✗ Embedder check failed: {e}")
+            return False
+
+        # Test database connectivity
+        try:
+            stats = self.registry.get_processing_stats()
+            print("✓ Document registry is functional")
+        except Exception as e:
+            print(f"✗ Document registry check failed: {e}")
+            return False
+
+        return True
+
+    def get_project_summary(self) -> dict[str, Any]:
+        """Get summary of project processing status.
+
+        Returns:
+            Dictionary with project summary information
+        """
+        stats = self.ingestion_pipeline.get_processing_stats()
+        documents = self.ingestion_pipeline.list_documents()
+
+        return {
+            "project_id": self.project_id,
+            "total_documents": len(documents),
+            "processing_stats": stats,
+            "extractor": self.ingestion_pipeline.extractor_name,
+            "embedder": self.ingestion_pipeline.embedder_name,
+            "registry_db": str(self.registry.db_path),
+        }

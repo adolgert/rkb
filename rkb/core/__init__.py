@@ -4,15 +4,13 @@ This module contains the fundamental interfaces, models, and registry components
 that form the foundation of the Research Knowledge Base system.
 """
 
-from rkb.core.document_registry import DocumentRegistry
-from rkb.core.interfaces import ExtractorInterface, EmbedderInterface
-from rkb.core.models import Document, ExtractionResult, EmbeddingResult
+from rkb.core.interfaces import EmbedderInterface, ExtractorInterface
+from rkb.core.models import Document, EmbeddingResult, ExtractionResult
 
 __all__ = [
-    "DocumentRegistry",
-    "ExtractorInterface",
-    "EmbedderInterface",
     "Document",
-    "ExtractionResult",
+    "EmbedderInterface",
     "EmbeddingResult",
+    "ExtractionResult",
+    "ExtractorInterface",
 ]

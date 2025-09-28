@@ -8,12 +8,10 @@ __version__ = "0.1.0"
 __author__ = "Adam Dolgert"
 
 # Public API exports
-from rkb.core.document_registry import DocumentRegistry
 from rkb.core.interfaces import ExtractorInterface, EmbedderInterface
 from rkb.core.models import Document, ExtractionResult, EmbeddingResult
 
 __all__ = [
-    "DocumentRegistry",
     "ExtractorInterface",
     "EmbedderInterface",
     "Document",
