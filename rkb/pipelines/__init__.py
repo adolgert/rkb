@@ -4,10 +4,10 @@ This package contains pipeline orchestration for document processing workflows
 including ingestion, extraction, embedding, and indexing operations.
 """
 
+from rkb.pipelines.complete_pipeline import CompletePipeline
 from rkb.pipelines.ingestion_pipeline import IngestionPipeline
-from rkb.pipelines.update_pipeline import UpdatePipeline
 
 __all__ = [
+    "CompletePipeline",
     "IngestionPipeline",
-    "UpdatePipeline",
 ]

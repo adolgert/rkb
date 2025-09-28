@@ -4,12 +4,13 @@ This package contains various embedding implementations for converting
 extracted text into vector representations for semantic search.
 """
 
-from rkb.embedders.base import get_embedder
+from rkb.embedders.base import get_embedder, list_embedders
+from rkb.embedders.chroma_embedder import ChromaEmbedder
 from rkb.embedders.ollama_embedder import OllamaEmbedder
-from rkb.embedders.openai_embedder import OpenAIEmbedder
 
 __all__ = [
-    "get_embedder",
+    "ChromaEmbedder",
     "OllamaEmbedder",
-    "OpenAIEmbedder",
+    "get_embedder",
+    "list_embedders",
 ]
