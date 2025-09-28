@@ -1,0 +1,182 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rkb"
+version = "0.1.0"
+description = "Personal research knowledge base with semantic search and experimental capabilities"
+authors = [{name = "Adam Dolgert", email = "adolgert@example.com"}]
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Text Processing :: Indexing",
+]
+dependencies = [
+    "chromadb>=0.4.0",
+    "requests>=2.28.0",
+    "click>=8.0.0",
+    "pydantic>=2.0.0",
+    "sqlalchemy>=2.0.0",
+    "pandas>=1.5.0",
+    "numpy>=1.21.0",
+    "tqdm>=4.64.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+nougat = [
+    "nougat-ocr>=0.1.0",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+]
+pdf = [
+    "pymupdf>=1.23.0",
+    "pytesseract>=0.3.10",
+    "easyocr>=1.7.0",
+]
+latex = [
+    "pandoc>=2.0.0",
+]
+api = [
+    "openai>=1.0.0",
+    "anthropic>=0.5.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "ruff>=0.1.0",
+    "import-linter>=2.0.0",
+    "sphinx>=7.0.0",
+    "sphinx-rtd-theme>=1.3.0",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
+]
+all = [
+    "rkb[nougat,pdf,latex,api,dev]"
+]
+
+[project.scripts]
+rkb = "rkb.cli.main:main"
+
+[project.urls]
+Homepage = "https://github.com/adolgert/research-knowledge-base"
+Repository = "https://github.com/adolgert/research-knowledge-base"
+Issues = "https://github.com/adolgert/research-knowledge-base/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rkb*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "ANN", "BLE", "FBT", "B", "A", "COM", "C4", "DTZ", "T10", "EM", "EXE", "FA", "ISC", "ICN", "G", "INP", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SLF", "SLOT", "SIM", "TID", "TCH", "INT", "ARG", "PTH", "TD", "FIX", "ERA", "PD", "PGH", "PL", "TRY", "FLY", "NPY", "AIR", "PERF", "FURB", "LOG", "RUF"]
+ignore = ["A001", "ANN201", "ANN001", "ANN003", "B008", "BLE001", "COM812", "DTZ005", "EM101", "EM102", "FBT001", "FBT002", "FBT003", "FIX002", "G004", "ISC001", "N806", "N812", "NPY002", "PLC0415", "PLR0911", "PLR0913", "PLR2004", "PT018", "ANN204", "PLR0915", "ANN202", "RUF002", "RUF100", "TD002", "TD003", "TRY003", "TRY300", "TRY301"]
+
+# Enforce no local imports - only top-level imports allowed
+[tool.ruff.lint.flake8-import-conventions]
+[tool.ruff.lint.isort]
+force-single-line = false
+known-first-party = ["rkb"]
+
+[tool.importlinter]
+root_package = "rkb"
+
+# Layer architecture enforcement: CLI -> Services -> Core
+[[tool.importlinter.contracts]]
+name = "Layer architecture"
+type = "layers"
+layers = [
+    "rkb.cli",
+    "rkb.services",
+    "rkb.pipelines",
+    "rkb.extractors | rkb.embedders",  # Same layer - can import from each other
+    "rkb.core",
+]
+
+# Core layer cannot import from higher layers
+[[tool.importlinter.contracts]]
+name = "Core layer isolation"
+type = "forbidden"
+source_modules = ["rkb.core"]
+forbidden_modules = [
+    "rkb.services",
+    "rkb.pipelines",
+    "rkb.extractors",
+    "rkb.embedders",
+    "rkb.cli",
+]
+
+# Processing layers cannot import from services or CLI
+[[tool.importlinter.contracts]]
+name = "Processing layer isolation"
+type = "forbidden"
+source_modules = ["rkb.extractors", "rkb.embedders", "rkb.pipelines"]
+forbidden_modules = ["rkb.services", "rkb.cli"]
+
+# Services cannot import from CLI
+[[tool.importlinter.contracts]]
+name = "Services isolation from CLI"
+type = "forbidden"
+source_modules = ["rkb.services"]
+forbidden_modules = ["rkb.cli"]
+
+# Prevent circular dependencies within same layer
+[[tool.importlinter.contracts]]
+name = "No circular dependencies"
+type = "independence"
+modules = [
+    "rkb.extractors.nougat_extractor",
+    "rkb.extractors.pymupdf_extractor",
+    "rkb.extractors.pandoc_extractor",
+    "rkb.embedders.ollama_embedder",
+    "rkb.embedders.openai_embedder",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--verbose",
+    "--cov=rkb",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+packages = ["rkb"]
+
+[tool.coverage.run]
+source = ["rkb"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "setup.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+]
