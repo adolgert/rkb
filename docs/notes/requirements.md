@@ -120,7 +120,6 @@ This document defines the functional and non-functional requirements for a perso
 - Efficient storage (avoid duplicate extractions)
 
 **Updates and Deletion**
-- Replace older ArXiv versions with newer ones
 - Cascade deletion (PDF → extraction → embeddings → search index)
 - Archive old versions rather than destructive updates
 - Support for manual document corrections
@@ -131,13 +130,11 @@ This document defines the functional and non-functional requirements for a perso
 **Content-Based Detection**
 - SHA-256 hashing of PDF content
 - Fuzzy matching for near-duplicates (different resolutions)
-- ArXiv version detection (v1, v2, v3, etc.)
 - DOI-based matching when available
 - File size and page count heuristics
 
 **Resolution Strategy**
 - Prefer higher resolution versions
-- Prefer later ArXiv versions
 - Prefer published over preprint versions
 - Manual review interface for ambiguous cases
 - Configurable policies for different duplicate types

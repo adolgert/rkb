@@ -51,6 +51,7 @@ Current Data Architecture Analysis
   {
     "source_file": "markdown.mmd",
     "pdf_name": "pdf_basename",
+    "doc_id": "document_uuid",  # MISSING - critical for document lineage
     "chunk_index": 0,
     "chunk_length": 1500,
     "has_equations": true,
@@ -64,9 +65,10 @@ Current Data Architecture Analysis
   1. No Content-Based Identification
     - Files tracked by name/path only
     - No MD5/SHA hashes for deduplication
-    - ArXiv version updates (v1→v2→v3) create duplicates
+    - Duplicate files create duplicate chunks
   2. Weak Document Traceability
     - Chunks link to .mmd files, not original PDFs
+    - Missing doc_id linkage in chunk metadata
     - No page number preservation
     - Lost hierarchical structure (chapters/sections)
   3. No Version Management
@@ -86,12 +88,12 @@ Current Data Architecture Analysis
 
   Current Behavior for Duplicate/Version Replacement:
 
-  1. Adding newer ArXiv version (e.g., paper_v2.pdf replacing paper_v1.pdf):
+  1. Adding duplicate documents:
     - Both files coexist in data/initial/
     - Both get extracted to separate .mmd files
     - Both get indexed, creating duplicate chunks
     - Search returns results from both versions
-    - No way to identify which is newer without filename parsing
+    - No content-based deduplication mechanism
   2. Replacing a PDF:
     - Old extraction remains in extracted/
     - Old chunks remain in Chroma database
@@ -124,7 +126,7 @@ Current Data Architecture Analysis
   2. Content-Based Operations:
     - Hash PDFs on ingestion
     - Detect duplicates before extraction
-    - Track ArXiv IDs for version management
+    - Track ArXiv IDs for paper identification
     - Link all derivatives to document ID
   3. Cascade Operations:
     - Delete document → remove extraction → delete chunks
@@ -141,7 +143,6 @@ Current Data Architecture Analysis
 
   This architecture would enable:
   - Automatic deduplication
-  - Version tracking for ArXiv papers
   - Clean updates/deletions
   - Document-level search results
   - Provenance tracking from search result to source PDF
