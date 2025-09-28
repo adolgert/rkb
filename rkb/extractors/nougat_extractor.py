@@ -91,8 +91,6 @@ class NougatExtractor(ExtractorInterface):
                     extraction_id=extraction_id,
                     status=ExtractionStatus.FAILED,
                     error_message="No content extracted from any chunks",
-                    successful_chunks=chunks_result["successful_chunks"],
-                    failed_chunks=chunks_result["failed_chunks"],
                 )
 
             # Clean and process the extracted text

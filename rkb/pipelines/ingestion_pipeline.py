@@ -22,6 +22,7 @@ class IngestionPipeline:
         extractor_name: str = "nougat",
         embedder_name: str = "chroma",
         project_id: str | None = None,
+        skip_embedding: bool = False,
     ):
         """Initialize ingestion pipeline.
 
@@ -30,15 +31,17 @@ class IngestionPipeline:
             extractor_name: Name of extractor to use
             embedder_name: Name of embedder to use
             project_id: Project identifier for document organization
+            skip_embedding: If True, only perform extraction, skip embedding
         """
         self.registry = registry or DocumentRegistry()
         self.extractor_name = extractor_name
         self.embedder_name = embedder_name
         self.project_id = project_id
+        self.skip_embedding = skip_embedding
 
         # Initialize components
         self.extractor = get_extractor(extractor_name)
-        self.embedder = get_embedder(embedder_name)
+        self.embedder = get_embedder(embedder_name) if not skip_embedding else None
 
     def process_single_document(
         self,
@@ -127,8 +130,8 @@ class IngestionPipeline:
                 chunks = chunk_text_by_pages(extraction_result.content, max_chunk_size)
                 print(f"  📝 Created {len(chunks)} chunks")
 
-                if chunks:
-                    # Generate embeddings
+                if chunks and not self.skip_embedding:
+                    # Generate embeddings only if not skipping
                     valid_chunks = [chunk for chunk in chunks if len(chunk.strip()) >= 50]
 
                     if valid_chunks:
@@ -144,22 +147,35 @@ class IngestionPipeline:
                         if embedding_result.error_message:
                             print(f"  ⚠ Embedding errors: {embedding_result.error_message}")
 
-            # Update document status to indexed (complete)
-            self.registry.update_document_status(document.doc_id, DocumentStatus.INDEXED)
+            # Update document status based on whether embedding was skipped
+            if self.skip_embedding:
+                # Only extraction was performed
+                self.registry.update_document_status(document.doc_id, DocumentStatus.EXTRACTED)
+            else:
+                # Full pipeline including embedding
+                self.registry.update_document_status(document.doc_id, DocumentStatus.INDEXED)
 
             processing_time = time.time() - start_time
             print(f"  ✓ Completed in {processing_time:.1f}s")
+
+            # Calculate chunk information
+            chunk_count = len(chunks) if extraction_result.content else 0
+            valid_chunk_count = 0
+            if extraction_result.content and chunks and not self.skip_embedding:
+                valid_chunks = [chunk for chunk in chunks if len(chunk.strip()) >= 50]
+                valid_chunk_count = len(valid_chunks)
 
             return {
                 "status": "success",
                 "source_path": str(source_path),
                 "doc_id": document.doc_id,
                 "extraction_id": extraction_result.extraction_id,
-                "chunk_count": len(chunks) if extraction_result.content else 0,
-                "valid_chunk_count": len(valid_chunks) if extraction_result.content else 0,
+                "chunk_count": chunk_count,
+                "valid_chunk_count": valid_chunk_count,
                 "has_equations": equation_info["has_equations"] if extraction_result.content else False,
                 "processing_time": round(processing_time, 1),
                 "timestamp": datetime.now().isoformat(),
+                "embedding_skipped": self.skip_embedding,
             }
 
         except Exception as e:

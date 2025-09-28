@@ -16,7 +16,7 @@ class TestChromaEmbedder:
         """Test embedder initialization with default values."""
         embedder = ChromaEmbedder()
 
-        assert embedder.collection_name == "academic_papers"
+        assert embedder.collection_name == "documents"
         assert embedder.db_path == Path("chroma_db")
         assert embedder.model_name == "all-MiniLM-L6-v2"
 

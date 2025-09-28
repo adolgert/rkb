@@ -14,7 +14,7 @@ class ChromaEmbedder(EmbedderInterface):
 
     def __init__(
         self,
-        collection_name: str = "academic_papers",
+        collection_name: str = "documents",
         db_path: Path | str | None = None,
         model_name: str = "all-MiniLM-L6-v2",
     ):
@@ -69,7 +69,7 @@ class ChromaEmbedder(EmbedderInterface):
             # Get or create collection
             try:
                 collection = client.get_collection(name=self.collection_name)
-            except ValueError:
+            except chromadb.errors.NotFoundError:
                 # Collection doesn't exist, create it
                 collection = client.create_collection(
                     name=self.collection_name,
@@ -80,31 +80,26 @@ class ChromaEmbedder(EmbedderInterface):
                     },
                 )
 
-            # Generate embeddings by adding to collection temporarily
-            # We'll add with temporary IDs and then extract the embeddings
-            temp_ids = [f"temp_{i}_{datetime.now().timestamp()}" for i in range(len(text_chunks))]
+            # Generate embeddings by adding documents to collection
+            # ChromaDB handles embeddings internally - we don't need to extract them
+            chunk_ids = [f"chunk_{i}_{datetime.now().timestamp()}" for i in range(len(text_chunks))]
 
-            # Add documents to collection (this generates embeddings)
+            # Add documents to collection (ChromaDB generates and stores embeddings internally)
             collection.add(
                 documents=text_chunks,
-                ids=temp_ids,
-                metadatas=[{"temp": True} for _ in text_chunks],
+                ids=chunk_ids,
+                metadatas=[{"chunk_index": i, "created": datetime.now().isoformat()}
+                          for i in range(len(text_chunks))],
             )
 
-            # Retrieve the embeddings that were just generated
-            result = collection.get(ids=temp_ids, include=["embeddings"])
-            embeddings = result["embeddings"] if result["embeddings"] else []
-
-            # Clean up temporary documents
-            collection.delete(ids=temp_ids)
-
+            # Return result without extracting embeddings (ChromaDB stores them internally)
             return EmbeddingResult(
                 embedder_name=self.name,
-                                vector_db_path=self.db_path,
+                vector_db_path=self.db_path,
                 embedder_config=self.get_configuration(),
-                embeddings=embeddings,
-                chunk_count=len(embeddings),
-                embedding_date=datetime.now(),
+                embeddings=[],  # Empty list - embeddings stored in ChromaDB
+                chunk_count=len(text_chunks),
+                indexed_date=datetime.now(),
             )
 
         except ImportError as e:

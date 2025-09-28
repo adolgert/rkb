@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from rkb.core.document_registry import DocumentRegistry
+from rkb.core.models import DocumentStatus
 from rkb.pipelines.ingestion_pipeline import IngestionPipeline
 
 
@@ -258,10 +259,35 @@ class CompletePipeline:
             end_time = time.time()
             duration = end_time - start_time
 
+            # Calculate statistics for CLI compatibility
+            proc_stats = pipeline_results["steps"]["process_documents"]
+            total_processed = proc_stats['total_files']
+            successful_extractions = proc_stats['successful']
+            failed_extractions = proc_stats['errors']
+
+            # Count embeddings from processing results
+            successful_embeddings = 0
+            failed_embeddings = 0
+            for result in proc_stats.get('results', []):
+                if result.get('status') == 'success' and not result.get('embedding_skipped', False):
+                    successful_embeddings += 1
+                elif result.get('status') == 'success' and result.get('embedding_skipped', False):
+                    # Extraction succeeded but embedding was skipped
+                    pass
+                elif result.get('status') == 'error':
+                    # Could be extraction or embedding failure - need more granular tracking
+                    failed_embeddings += 1
+
             pipeline_results.update({
                 "success": True,
                 "duration_seconds": round(duration, 1),
                 "timestamp": datetime.now().isoformat(),
+                # Add CLI-expected keys
+                "documents_processed": total_processed,
+                "successful_extractions": successful_extractions,
+                "failed_extractions": failed_extractions,
+                "successful_embeddings": successful_embeddings,
+                "failed_embeddings": failed_embeddings,
             })
 
             # Print summary
@@ -270,10 +296,9 @@ class CompletePipeline:
             print(f"⏱ Total time: {duration:.1f} seconds")
             print(f"📄 Files found: {pipeline_results['steps']['find_files']['files_found']}")
 
-            proc_stats = pipeline_results["steps"]["process_documents"]
-            print(f"📚 Documents processed: {proc_stats['successful']}/{proc_stats['total_files']}")
-            if proc_stats["errors"] > 0:
-                print(f"❌ Processing errors: {proc_stats['errors']}")
+            print(f"📚 Documents processed: {successful_extractions}/{total_processed}")
+            if failed_extractions > 0:
+                print(f"❌ Processing errors: {failed_extractions}")
             if proc_stats["skipped"] > 0:
                 print(f"⏭ Skipped: {proc_stats['skipped']}")
 
@@ -296,6 +321,12 @@ class CompletePipeline:
                 "duration_seconds": round(duration, 1),
                 "error": str(e),
                 "timestamp": datetime.now().isoformat(),
+                # Add CLI-expected keys with zero values
+                "documents_processed": 0,
+                "successful_extractions": 0,
+                "failed_extractions": 0,
+                "successful_embeddings": 0,
+                "failed_embeddings": 0,
             })
 
             print(f"\n❌ Pipeline failed after {duration:.1f} seconds: {e}")
@@ -370,3 +401,82 @@ class CompletePipeline:
             "embedder": self.ingestion_pipeline.embedder_name,
             "registry_db": str(self.registry.db_path),
         }
+
+    def process_documents(
+        self,
+        pdf_paths: list[Path],
+        project_id: str | None = None,
+        force_reprocess: bool = False,
+        skip_extraction: bool = False,
+    ) -> dict[str, Any]:
+        """Process documents with optional extraction skipping for indexing-only.
+
+        Args:
+            pdf_paths: List of PDF paths to process
+            project_id: Project identifier
+            force_reprocess: Whether to reprocess existing documents
+            skip_extraction: If True, only perform embedding/indexing
+
+        Returns:
+            Dictionary with processing results
+        """
+        if skip_extraction:
+            # For indexing-only, we need to create a pipeline that only does embedding
+            embedding_pipeline = IngestionPipeline(
+                registry=self.registry,
+                extractor_name=self.ingestion_pipeline.extractor_name,
+                embedder_name=self.ingestion_pipeline.embedder_name,
+                project_id=project_id or self.project_id,
+                skip_embedding=False  # We want embedding for indexing
+            )
+
+            # Process only documents that are already extracted
+            results = []
+            successful_embeddings = 0
+            failed_embeddings = 0
+
+            for pdf_path in pdf_paths:
+                # Get existing document
+                existing_doc = self.registry.get_document_by_path(pdf_path)
+                if existing_doc and existing_doc.status == DocumentStatus.EXTRACTED:
+                    # Process for embedding only
+                    result = embedding_pipeline.process_single_document(
+                        pdf_path,
+                        force_reprocess=force_reprocess
+                    )
+                    results.append(result)
+
+                    if result["status"] == "success":
+                        successful_embeddings += 1
+                    else:
+                        failed_embeddings += 1
+
+            return {
+                "documents_processed": len(pdf_paths),
+                "successful_extractions": 0,  # No extraction was done
+                "failed_extractions": 0,
+                "successful_embeddings": successful_embeddings,
+                "failed_embeddings": failed_embeddings,
+                "results": results,
+            }
+        else:
+            # Regular processing
+            pdf_list = [str(path) for path in pdf_paths]
+            results = self.ingestion_pipeline.process_batch(
+                pdf_list=pdf_list,
+                force_reprocess=force_reprocess
+            )
+
+            # Count results
+            successful = len([r for r in results if r.get('status') == 'success'])
+            failed = len([r for r in results if r.get('status') == 'error'])
+
+            # For full processing, successful extractions = successful embeddings
+            return {
+                "documents_processed": len(pdf_paths),
+                "successful_extractions": successful,
+                "failed_extractions": failed,
+                "successful_embeddings": successful,
+                "failed_embeddings": failed,
+                "results": results,
+            }
