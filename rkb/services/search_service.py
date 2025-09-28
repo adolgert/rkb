@@ -7,7 +7,7 @@ from typing import Any
 import chromadb
 
 from rkb.core.document_registry import DocumentRegistry
-from rkb.core.models import SearchResult, ChunkResult
+from rkb.core.models import ChunkResult, SearchResult
 from rkb.embedders.base import get_embedder
 
 
@@ -112,9 +112,11 @@ class SearchService:
                 distances = results["distances"][0]
                 ids = results["ids"][0] if results["ids"] else [None] * len(documents)
 
-                for doc, metadata, distance, chunk_id in zip(documents, metadatas, distances, ids):
-                    # Convert distance to similarity score
-                    similarity = 1 - distance if distance is not None else 0.0
+                for doc, metadata, distance, chunk_id in zip(
+                    documents, metadatas, distances, ids, strict=True
+                ):
+                    # Convert distance to similarity score using inverse distance formula
+                    similarity = 1 / (1 + distance) if distance is not None else 0.0
 
                     chunk_result = ChunkResult(
                         chunk_id=chunk_id or f"chunk_{len(chunk_results)}",
@@ -225,12 +227,15 @@ class SearchService:
                 distances = results["distances"][0]
                 ids = results["ids"][0] if results["ids"] else [None] * len(documents)
 
-                for doc, metadata, distance, found_chunk_id in zip(documents, metadatas, distances, ids):
+                for doc, metadata, distance, found_chunk_id in zip(
+                    documents, metadatas, distances, ids, strict=True
+                ):
                     # Skip the reference chunk itself
                     if found_chunk_id == chunk_id:
                         continue
 
-                    similarity = 1 - distance if distance is not None else 0.0
+                    # Convert distance to similarity score using inverse distance formula
+                    similarity = 1 / (1 + distance) if distance is not None else 0.0
                     chunk_result = ChunkResult(
                         chunk_id=found_chunk_id or f"chunk_{len(chunk_results)}",
                         content=doc,
@@ -304,7 +309,7 @@ class SearchService:
                 "error": str(e),
             }
 
-    def test_search(self, test_query: str = "machine learning") -> SearchResult:
+    def test_search(self, test_query: str = "machine learning") -> SearchResult:  # noqa: T201
         """Test search functionality with a sample query.
 
         Args:
@@ -313,19 +318,23 @@ class SearchService:
         Returns:
             SearchResult from test query
         """
-        print(f"🧪 Testing search with query: '{test_query}'")
+        msg = f"🧪 Testing search with query: '{test_query}'"
+        print(msg)  # noqa: T201
         result = self.search_documents(test_query, n_results=3)
 
         if result.error_message:
-            print(f"✗ Search test failed: {result.error_message}")
+            msg = f"✗ Search test failed: {result.error_message}"
+            print(msg)  # noqa: T201
         elif result.total_results > 0:
-            print(f"✓ Search test successful - found {result.total_results} results")
+            msg = f"✓ Search test successful - found {result.total_results} results"
+            print(msg)  # noqa: T201
         else:
-            print("⚠ Search test returned no results (may be normal)")
+            msg = "⚠ Search test returned no results (may be normal)"
+            print(msg)  # noqa: T201
 
         return result
 
-    def display_results(
+    def display_results(  # noqa: T201
         self,
         search_result: SearchResult,
         show_content: bool = True,
@@ -339,44 +348,53 @@ class SearchService:
             max_content_length: Maximum length of content to display
         """
         if search_result.error_message:
-            print(f"✗ Search error: {search_result.error_message}")
+            msg = f"✗ Search error: {search_result.error_message}"
+            print(msg)  # noqa: T201
             return
 
         if search_result.total_results == 0:
-            print("No results found.")
+            print("No results found.")  # noqa: T201
             return
 
-        print(f"\n📊 Found {search_result.total_results} results for: '{search_result.query}'")
+        msg = f"\n📊 Found {search_result.total_results} results for: '{search_result.query}'"
+        print(msg)  # noqa: T201
         if search_result.filters_applied:
-            print(f"🔧 Filters: {search_result.filters_applied}")
-        print("=" * 80)
+            msg = f"🔧 Filters: {search_result.filters_applied}"
+            print(msg)  # noqa: T201
+        print("=" * 80)  # noqa: T201
 
         for i, chunk in enumerate(search_result.chunk_results):
-            print(f"\n🔖 Result {i+1} (similarity: {chunk.similarity:.3f})")
+            msg = f"\n🔖 Result {i+1} (similarity: {chunk.similarity:.3f})"
+            print(msg)  # noqa: T201
 
             # Extract common metadata fields
             metadata = chunk.metadata
             if "pdf_name" in metadata:
                 chunk_idx = metadata.get("chunk_index", "?")
-                print(f"📄 Source: {metadata['pdf_name']} (chunk {chunk_idx})")
+                msg = f"📄 Source: {metadata['pdf_name']} (chunk {chunk_idx})"
+                print(msg)  # noqa: T201
             elif "doc_id" in metadata:
-                print(f"📄 Document: {metadata['doc_id']}")
+                msg = f"📄 Document: {metadata['doc_id']}"
+                print(msg)  # noqa: T201
 
             if "has_equations" in metadata:
                 eq_display = metadata.get("display_eq_count", 0)
                 eq_inline = metadata.get("inline_eq_count", 0)
                 has_eq = "✓" if metadata["has_equations"] else "✗"
-                print(f"🧮 Equations: {has_eq} (Display: {eq_display}, Inline: {eq_inline})")
+                msg = f"🧮 Equations: {has_eq} (Display: {eq_display}, Inline: {eq_inline})"
+                print(msg)  # noqa: T201
 
             if show_content:
                 content = chunk.content[:max_content_length]
                 if len(chunk.content) > max_content_length:
                     content += "..."
-                print(f"📝 Content:\n{content}")
+                msg = f"📝 Content:\n{content}"
+                print(msg)  # noqa: T201
 
-            print("-" * 80)
+            print("-" * 80)  # noqa: T201
 
         # Show average similarity
         if search_result.chunk_results:
             avg_similarity = search_result.avg_score
-            print(f"\n📈 Average similarity: {avg_similarity:.3f}")
+            msg = f"\n📈 Average similarity: {avg_similarity:.3f}"
+            print(msg)  # noqa: T201

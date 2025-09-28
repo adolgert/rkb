@@ -17,7 +17,7 @@ class TestChromaEmbedder:
         embedder = ChromaEmbedder()
 
         assert embedder.collection_name == "documents"
-        assert embedder.db_path == Path("chroma_db")
+        assert embedder.db_path == Path("rkb_chroma_db")
         assert embedder.model_name == "all-MiniLM-L6-v2"
 
     def test_embedder_initialization_with_params(self):

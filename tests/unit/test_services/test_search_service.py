@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from rkb.core.document_registry import DocumentRegistry
-from rkb.core.models import SearchResult, ChunkResult
+from rkb.core.models import ChunkResult, SearchResult
 from rkb.services.search_service import SearchService
 
 
@@ -33,11 +33,18 @@ class TestSearchService:
         collection = Mock()
         collection.count.return_value = 100
         collection.query.return_value = {
-            "documents": [["test document content", "another document"]],
+            "documents": [[
+                "test document content",
+                "another document",
+                "far document",
+                "very far document",
+            ]],
             "metadatas": [[{"pdf_name": "test.pdf", "chunk_index": 0, "has_equations": True},
-                          {"pdf_name": "test2.pdf", "chunk_index": 1, "has_equations": False}]],
-            "distances": [[0.2, 0.3]],
-            "ids": [["chunk_1", "chunk_2"]],
+                          {"pdf_name": "test2.pdf", "chunk_index": 1, "has_equations": False},
+                          {"pdf_name": "test3.pdf", "chunk_index": 2, "has_equations": True},
+                          {"pdf_name": "test4.pdf", "chunk_index": 3, "has_equations": False}]],
+            "distances": [[0.2, 0.3, 1.5, 2.0]],  # Include distances > 1.0 to test the fix
+            "ids": [["chunk_1", "chunk_2", "chunk_3", "chunk_4"]],
         }
         return collection
 
@@ -62,38 +69,83 @@ class TestSearchService:
         assert service.embedder_name == "chroma"
         assert service.registry == temp_db
 
+    def test_similarity_conversion(self):
+        """Test distance to similarity conversion using inverse distance formula."""
+        # Test cases for the similarity calculation: similarity = 1 / (1 + distance)
+        test_cases = [
+            (0.0, 1.0),      # Perfect match: distance 0 → similarity 1.0
+            (0.2, 0.833),    # Good match: distance 0.2 → similarity ~0.833
+            (1.0, 0.5),      # Medium match: distance 1.0 → similarity 0.5
+            (1.066, 0.484),  # Real data case: distance 1.066 → similarity ~0.484
+            (2.0, 0.333),    # Poor match: distance 2.0 → similarity ~0.333
+            (5.0, 0.167),    # Very poor match: distance 5.0 → similarity ~0.167
+        ]
+
+        for distance, expected_similarity in test_cases:
+            # Test the actual formula used in search_service.py
+            similarity = 1 / (1 + distance)
+            assert abs(similarity - expected_similarity) < 0.001, (
+                f"Distance {distance} should give similarity ~{expected_similarity}, "
+                f"got {similarity}"
+            )
+
+            # Verify similarity is always in [0, 1] range
+            assert 0 <= similarity <= 1, f"Similarity {similarity} not in [0,1] range"
+
+        # Test None distance case
+        distance = None
+        similarity = 1 / (1 + distance) if distance is not None else 0.0
+        assert similarity == 0.0, "None distance should give similarity 0.0"
+
     def test_search_documents_success(self, temp_db, mock_chroma_collection, mock_embedder):
         """Test successful document search."""
-        with patch('rkb.services.search_service.get_embedder', return_value=mock_embedder), \
-             patch('rkb.services.search_service.chromadb.PersistentClient') as mock_client:
+        with patch("rkb.services.search_service.get_embedder", return_value=mock_embedder), \
+             patch("rkb.services.search_service.chromadb.PersistentClient") as mock_client:
 
             # Mock Chroma client
             mock_client.return_value.get_collection.return_value = mock_chroma_collection
 
             service = SearchService(registry=temp_db)
-            result = service.search_documents("test query", n_results=2)
+            result = service.search_documents("test query", n_results=4)
 
             assert isinstance(result, SearchResult)
             assert result.query == "test query"
-            assert result.total_results == 2
-            assert len(result.chunk_results) == 2
+            assert result.total_results == 4
+            assert len(result.chunk_results) == 4
             assert result.error_message is None
 
-            # Check chunk results
+            # Check chunk results with different distances
             chunk1 = result.chunk_results[0]
             assert chunk1.content == "test document content"
-            assert chunk1.similarity == 0.8  # 1 - 0.2
+            assert abs(chunk1.similarity - 0.833) < 0.001  # 1 / (1 + 0.2) ≈ 0.833
             assert chunk1.metadata["pdf_name"] == "test.pdf"
+
+            # Check that distances > 1.0 produce reasonable similarity scores
+            chunk3 = result.chunk_results[2]  # distance 1.5
+            expected_similarity_3 = 1 / (1 + 1.5)  # = 0.4
+            assert abs(chunk3.similarity - expected_similarity_3) < 0.001
+            assert chunk3.content == "far document"
+
+            chunk4 = result.chunk_results[3]  # distance 2.0
+            expected_similarity_4 = 1 / (1 + 2.0)  # ≈ 0.333
+            assert abs(chunk4.similarity - expected_similarity_4) < 0.001
+            assert chunk4.content == "very far document"
+
+            # Verify all similarities are in [0, 1] range
+            for chunk in result.chunk_results:
+                assert (
+                    0 <= chunk.similarity <= 1
+                ), f"Similarity {chunk.similarity} not in [0,1] range"
 
     def test_search_documents_with_filters(self, temp_db, mock_chroma_collection, mock_embedder):
         """Test document search with filters."""
-        with patch('rkb.services.search_service.get_embedder', return_value=mock_embedder), \
-             patch('rkb.services.search_service.chromadb.PersistentClient') as mock_client:
+        with patch("rkb.services.search_service.get_embedder", return_value=mock_embedder), \
+             patch("rkb.services.search_service.chromadb.PersistentClient") as mock_client:
 
             mock_client.return_value.get_collection.return_value = mock_chroma_collection
 
             service = SearchService(registry=temp_db)
-            result = service.search_documents(
+            service.search_documents(
                 "test query",
                 filter_equations=True,
                 project_id="test_project",
@@ -111,8 +163,8 @@ class TestSearchService:
 
     def test_search_documents_error(self, temp_db, mock_embedder):
         """Test search error handling."""
-        with patch('rkb.services.search_service.get_embedder', return_value=mock_embedder), \
-             patch('rkb.services.search_service.chromadb.PersistentClient') as mock_client:
+        with patch("rkb.services.search_service.get_embedder", return_value=mock_embedder), \
+             patch("rkb.services.search_service.chromadb.PersistentClient") as mock_client:
 
             # Mock Chroma to raise exception for both get and create
             mock_client.return_value.get_collection.side_effect = Exception("Connection failed")
@@ -127,13 +179,13 @@ class TestSearchService:
 
     def test_search_by_document(self, temp_db, mock_chroma_collection, mock_embedder):
         """Test searching within a specific document."""
-        with patch('rkb.services.search_service.get_embedder', return_value=mock_embedder), \
-             patch('rkb.services.search_service.chromadb.PersistentClient') as mock_client:
+        with patch("rkb.services.search_service.get_embedder", return_value=mock_embedder), \
+             patch("rkb.services.search_service.chromadb.PersistentClient") as mock_client:
 
             mock_client.return_value.get_collection.return_value = mock_chroma_collection
 
             service = SearchService(registry=temp_db)
-            result = service.search_by_document("test query", "doc123")
+            service.search_by_document("test query", "doc123")
 
             # Verify document filter was applied
             mock_chroma_collection.query.assert_called_once()
@@ -143,8 +195,8 @@ class TestSearchService:
 
     def test_get_similar_chunks(self, temp_db, mock_chroma_collection, mock_embedder):
         """Test finding similar chunks."""
-        with patch('rkb.services.search_service.get_embedder', return_value=mock_embedder), \
-             patch('rkb.services.search_service.chromadb.PersistentClient') as mock_client:
+        with patch("rkb.services.search_service.get_embedder", return_value=mock_embedder), \
+             patch("rkb.services.search_service.chromadb.PersistentClient") as mock_client:
 
             mock_client.return_value.get_collection.return_value = mock_chroma_collection
 
@@ -155,7 +207,7 @@ class TestSearchService:
             }
 
             service = SearchService(registry=temp_db)
-            result = service.get_similar_chunks("ref_chunk_id", n_results=3)
+            service.get_similar_chunks("ref_chunk_id", n_results=3)
 
             # Verify reference chunk was retrieved
             mock_chroma_collection.get.assert_called_once_with(ids=["ref_chunk_id"])
@@ -167,8 +219,8 @@ class TestSearchService:
 
     def test_get_database_stats(self, temp_db, mock_chroma_collection, mock_embedder):
         """Test getting database statistics."""
-        with patch('rkb.services.search_service.get_embedder', return_value=mock_embedder), \
-             patch('rkb.services.search_service.chromadb.PersistentClient') as mock_client:
+        with patch("rkb.services.search_service.get_embedder", return_value=mock_embedder), \
+             patch("rkb.services.search_service.chromadb.PersistentClient") as mock_client:
 
             mock_client.return_value.get_collection.return_value = mock_chroma_collection
 
@@ -192,8 +244,8 @@ class TestSearchService:
 
     def test_test_search(self, temp_db, mock_chroma_collection, mock_embedder):
         """Test the test search functionality."""
-        with patch('rkb.services.search_service.get_embedder', return_value=mock_embedder), \
-             patch('rkb.services.search_service.chromadb.PersistentClient') as mock_client:
+        with patch("rkb.services.search_service.get_embedder", return_value=mock_embedder), \
+             patch("rkb.services.search_service.chromadb.PersistentClient") as mock_client:
 
             mock_client.return_value.get_collection.return_value = mock_chroma_collection
 
@@ -262,3 +314,4 @@ class TestSearchService:
 
         captured = capsys.readouterr()
         assert "Search error: Database connection failed" in captured.out
+
