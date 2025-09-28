@@ -26,7 +26,7 @@ class ChromaEmbedder(EmbedderInterface):
             model_name: Chroma embedding model name
         """
         self.collection_name = collection_name
-        self.db_path = Path(db_path) if db_path else Path("chroma_db")
+        self.db_path = Path(db_path) if db_path else Path("rkb_chroma_db")
         self.model_name = model_name
 
     @property
