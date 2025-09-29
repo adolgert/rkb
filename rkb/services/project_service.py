@@ -145,15 +145,15 @@ class ProjectService:
         if not data_path.exists():
             raise FileNotFoundError(f"Data directory not found: {data_path}")
 
-        LOGGER.info(f"Scanning for PDFs in: {data_path}")
+        LOGGER.info(f"Scanning for PDFs in: {data_path} (including subdirectories)")
 
-        # Find all PDF files
-        pdf_files = list(data_path.glob("*.pdf"))
+        # Find all PDF files recursively in subdirectories
+        pdf_files = list(data_path.glob("**/*.pdf"))
 
         if not pdf_files:
-            raise FileNotFoundError(f"No PDF files found in {data_path}")
+            raise FileNotFoundError(f"No PDF files found in {data_path} or its subdirectories")
 
-        LOGGER.info(f"Found {len(pdf_files)} PDF files")
+        LOGGER.info(f"Found {len(pdf_files)} PDF files in directory tree")
 
         # Get file info with modification time
         file_info = []

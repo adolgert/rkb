@@ -18,7 +18,7 @@ First, scan your directory to see what PDFs are available:
 rkb find --data-dir data/initial --num-files 10
 ```
 
-This will show you the 10 most recent PDF files in your directory.
+This will show you the 10 most recent PDF files in your directory and all subdirectories (recursive search).
 
 ### Step 2: Create a Project (Optional)
 
@@ -50,7 +50,7 @@ Run the full pipeline to extract and create embeddings:
 rkb pipeline --data-dir data/initial --num-files 3 --project-name "Test Project" --extractor nougat --embedder chroma --max-pages 5
 ```
 
-**New behavior**: The pipeline now handles duplicate filenames automatically. Multiple files named "Document.pdf" from different sources (like Zotero storage folders) are processed without conflicts. Identical content is automatically detected and linked.
+**New behavior**: The pipeline now handles duplicate filenames automatically and recursively searches subdirectories. Multiple files named "Document.pdf" from different sources (like Zotero storage folders) are processed without conflicts. Identical content is automatically detected and linked. Perfect for Zotero storage with its `ABC123/Document.pdf` structure.
 
 **Currently errors**: The pipeline fails during the embedding step with array comparison issues in ChromaDB. The extraction portion works correctly.
 
@@ -240,13 +240,29 @@ cp sample1.pdf test_zotero/Zotero/storage/ABC123/Document.pdf
 cp sample2.pdf test_zotero/Zotero/storage/XYZ789/Document.pdf
 cp sample1.pdf test_zotero/Zotero/storage/DEF456/Paper.pdf  # Duplicate content
 
-# Process the entire directory
+# Process the entire directory (now recursively finds PDFs in subdirectories)
 rkb pipeline --data-dir test_zotero/Zotero/storage --num-files 10
 
 # Expected:
 # - ABC123/Document.pdf: processed successfully
 # - XYZ789/Document.pdf: processed successfully (different content)
 # - DEF456/Paper.pdf: marked as duplicate of ABC123 version
+```
+
+### Test 6: Real Zotero Storage Usage
+
+```bash
+# Find recent PDFs in your actual Zotero storage (now works with subdirectories!)
+rkb find --data-dir ~/Zotero/storage --num-files 20
+
+# Process recent papers from your Zotero library
+rkb pipeline --data-dir ~/Zotero/storage --num-files 10 --project-name "Zotero Papers" --max-pages 15
+
+# The system will:
+# - Recursively find all PDFs in Zotero's ABC123/Document.pdf structure
+# - Handle duplicate filenames automatically
+# - Detect content duplicates across different Zotero folders
+# - Create UUID-based storage that doesn't conflict with Zotero's naming
 ```
 
 ### Test 5: Verify Storage Structure
