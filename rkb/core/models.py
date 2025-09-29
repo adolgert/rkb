@@ -208,6 +208,7 @@ class ExperimentConfig:
     chunk_size: int = 2000
     search_strategy: str = "semantic_only"
     vector_db_path: Path | None = None
+    description: str = ""
     created_date: datetime = field(default_factory=datetime.now)
 
     def __post_init__(self) -> None:

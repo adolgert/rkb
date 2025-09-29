@@ -90,18 +90,20 @@ class TestChromaEmbedder:
         mock_client.get_collection.side_effect = mock_chromadb.errors.NotFoundError(error_msg)
         mock_client.create_collection.return_value = mock_collection
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with patch.dict(sys.modules, {"chromadb": mock_chromadb}):
-                embedder = ChromaEmbedder(db_path=temp_dir)
-                result = embedder.embed(["text1", "text2"])
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            patch.dict(sys.modules, {"chromadb": mock_chromadb}),
+        ):
+            embedder = ChromaEmbedder(db_path=temp_dir)
+            result = embedder.embed(["text1", "text2"])
 
-                assert result.embeddings == []  # ChromaDB stores embeddings internally
-                assert result.chunk_count == 2
-                assert result.embedder_name == "chroma"
-                assert result.error_message is None
+            assert result.embeddings == []  # ChromaDB stores embeddings internally
+            assert result.chunk_count == 2
+            assert result.embedder_name == "chroma"
+            assert result.error_message is None
 
-                # Verify collection was created
-                mock_client.create_collection.assert_called_once()
+            # Verify collection was created
+            mock_client.create_collection.assert_called_once()
 
     def test_embed_successful_existing_collection(self):
         """Test successful embedding with existing collection."""
@@ -115,17 +117,19 @@ class TestChromaEmbedder:
         # Simulate collection exists
         mock_client.get_collection.return_value = mock_collection
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with patch.dict(sys.modules, {"chromadb": mock_chromadb}):
-                embedder = ChromaEmbedder(db_path=temp_dir)
-                result = embedder.embed(["text1"])
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            patch.dict(sys.modules, {"chromadb": mock_chromadb}),
+        ):
+            embedder = ChromaEmbedder(db_path=temp_dir)
+            result = embedder.embed(["text1"])
 
-                assert result.embeddings == []  # ChromaDB stores embeddings internally
-                assert result.chunk_count == 1
-                assert result.embedder_name == "chroma"
-                assert result.error_message is None
+            assert result.embeddings == []  # ChromaDB stores embeddings internally
+            assert result.chunk_count == 1
+            assert result.embedder_name == "chroma"
+            assert result.error_message is None
 
-                # Verify collection was not created (already existed)
-                mock_client.create_collection.assert_not_called()
+            # Verify collection was not created (already existed)
+            mock_client.create_collection.assert_not_called()
 
 

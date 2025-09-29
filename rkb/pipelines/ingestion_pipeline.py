@@ -222,7 +222,7 @@ class IngestionPipeline:
             if not pdf_list_path.exists():
                 raise FileNotFoundError(f"PDF list file not found: {pdf_list_path}")
 
-            with open(pdf_list_path) as f:
+            with pdf_list_path.open() as f:
                 pdf_files = json.load(f)
         else:
             pdf_files = pdf_list
@@ -282,7 +282,7 @@ class IngestionPipeline:
 
                 log_path = Path(log_file)
                 log_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(log_path, "w") as f:
+                with log_path.open("w") as f:
                     json.dump(log_data, f, indent=2)
 
         total_time = time.time() - start_time

@@ -1,8 +1,8 @@
 """Project service for managing document collections and experiments."""
 
+import datetime
 import json
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +39,7 @@ class ProjectService:
         Returns:
             Project ID
         """
-        project_id = f"project_{int(datetime.now().timestamp())}"
+        project_id = f"project_{int(datetime.datetime.now().timestamp())}"
 
         # For now, projects are just logical groupings in the registry
         # Future versions could have a dedicated projects table
@@ -165,9 +165,9 @@ class ProjectService:
                     "name": pdf_file.name,
                     "size_mb": round(stat.st_size / (1024 * 1024), 2),
                     "modified_time": stat.st_mtime,
-                    "modified_date": datetime.fromtimestamp(stat.st_mtime).strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    ),
+                    "modified_date": datetime.datetime.fromtimestamp(
+                        stat.st_mtime, tz=datetime.UTC
+                    ).strftime("%Y-%m-%d %H:%M:%S"),
                     "project_id": project_id,
                 })
             except Exception as e:
@@ -288,7 +288,8 @@ class ProjectService:
         LOGGER.info(f"Found {len(filtered_docs)} documents matching criteria")
 
         # Could save subset definition for future use
-        # subset_info would contain: subset_name, criteria, project_id, created_date, document_count, document_ids
+        # subset_info would contain: subset_name, criteria, project_id, created_date,
+        # document_count, document_ids
 
         return filtered_docs
 
@@ -344,7 +345,7 @@ class ProjectService:
 
         export_data = {
             "project_id": project_id,
-            "export_date": datetime.now().isoformat(),
+            "export_date": datetime.datetime.now().isoformat(),
             "stats": {
                 "total_documents": stats.total_documents,
                 "indexed_count": stats.indexed_count,

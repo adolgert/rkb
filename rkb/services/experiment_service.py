@@ -62,6 +62,7 @@ class ExperimentService:
             chunk_size=chunk_size,
             search_strategy=search_strategy,
             vector_db_path=Path(vector_db_path) if vector_db_path else None,
+            description=description,
         )
 
         # Store experiment configuration
@@ -249,7 +250,7 @@ class ExperimentService:
                 if not metric_values:  # First experiment becomes baseline
                     metric_values[exp_id] = 1.0
                 else:
-                    baseline_exp_id = list(experiment_results.keys())[0]
+                    baseline_exp_id = next(iter(experiment_results.keys()))
                     baseline_results = experiment_results[baseline_exp_id]
 
                     overlaps = []
@@ -351,11 +352,9 @@ class ExperimentService:
                 "chunks": [
                     {
                         "content": (
-                            (
-                                chunk.content[:200] + "..."
-                                if len(chunk.content) > 200
-                                else chunk.content
-                            )
+                            chunk.content[:200] + "..."
+                            if len(chunk.content) > 200
+                            else chunk.content
                         ),
                         "similarity": chunk.similarity,
                         "metadata": chunk.metadata,

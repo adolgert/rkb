@@ -1,9 +1,9 @@
 """Complete pipeline for document discovery, processing, and indexing."""
 
+import datetime
 import json
 import logging
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -83,11 +83,11 @@ class CompletePipeline:
                     "name": pdf_file.name,
                     "size_mb": round(stat.st_size / (1024 * 1024), 2),
                     "modified_time": stat.st_mtime,
-                    "modified_date": datetime.fromtimestamp(
-                        stat.st_mtime, tz=timezone.utc
+                    "modified_date": datetime.datetime.fromtimestamp(
+                        stat.st_mtime, tz=datetime.UTC
                     ).strftime("%Y-%m-%d %H:%M:%S"),
                 })
-            except Exception:
+            except Exception as e:
                 LOGGER.warning(f"Error reading {pdf_file}: {e}")
                 continue
 
@@ -287,7 +287,7 @@ class CompletePipeline:
             pipeline_results.update({
                 "success": True,
                 "duration_seconds": round(duration, 1),
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.datetime.now().isoformat(),
                 # Add CLI-expected keys
                 "documents_processed": total_processed,
                 "successful_extractions": successful_extractions,
@@ -326,7 +326,7 @@ class CompletePipeline:
                 "success": False,
                 "duration_seconds": round(duration, 1),
                 "error": str(e),
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.datetime.now().isoformat(),
                 # Add CLI-expected keys with zero values
                 "documents_processed": 0,
                 "successful_extractions": 0,
