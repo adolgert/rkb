@@ -54,11 +54,12 @@ class NougatExtractor(ExtractorInterface):
         """Return the extractor version."""
         return "1.0.0"
 
-    def extract(self, source_path: Path) -> ExtractionResult:
+    def extract(self, source_path: Path, doc_id: str | None = None) -> ExtractionResult:
         """Extract text from PDF using chunked Nougat processing.
 
         Args:
             source_path: Path to the PDF file
+            doc_id: Document ID for consistent output naming
 
         Returns:
             ExtractionResult with extracted content and metadata
@@ -66,14 +67,18 @@ class NougatExtractor(ExtractorInterface):
         source_path = Path(source_path)
         if not source_path.exists():
             return ExtractionResult(
-                doc_id=str(source_path),
+                doc_id=doc_id or str(source_path),
                 status=ExtractionStatus.FAILED,
                 error_message=f"File not found: {source_path}",
             )
 
-        # Create output directory
-        self.output_dir.mkdir(exist_ok=True)
-        extraction_id = f"{source_path.stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # Use provided doc_id or generate one
+        if not doc_id:
+            from uuid import uuid4
+
+            doc_id = str(uuid4())
+
+        extraction_id = f"{doc_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
         try:
             # Calculate file hash for deduplication
@@ -87,7 +92,7 @@ class NougatExtractor(ExtractorInterface):
 
             if not chunks_result["content"]:
                 return ExtractionResult(
-                    doc_id=str(source_path),
+                    doc_id=doc_id,
                     extraction_id=extraction_id,
                     status=ExtractionStatus.FAILED,
                     error_message="No content extracted from any chunks",
@@ -103,12 +108,19 @@ class NougatExtractor(ExtractorInterface):
             text_chunks = chunk_text_by_pages(cleaned_content)
             chunk_metadata = create_chunk_metadata(text_chunks)
 
+            # Use PathResolver for consistent output location
+            from rkb.core.paths import PathResolver
+
+            extraction_path = PathResolver.get_extraction_path(doc_id, self.output_dir)
+
+            # Ensure directory exists
+            PathResolver.ensure_extraction_dir(doc_id, self.output_dir)
+
             # Save extraction to file
-            extraction_path = self.output_dir / f"{extraction_id}.mmd"
             extraction_path.write_text(cleaned_content, encoding="utf-8")
 
             return ExtractionResult(
-                doc_id=str(source_path),
+                doc_id=doc_id,
                 extraction_id=extraction_id,
                 status=ExtractionStatus.COMPLETE,
                 extraction_path=extraction_path,
@@ -122,7 +134,7 @@ class NougatExtractor(ExtractorInterface):
 
         except Exception as e:
             return ExtractionResult(
-                doc_id=str(source_path),
+                doc_id=doc_id,
                 extraction_id=extraction_id,
                 status=ExtractionStatus.FAILED,
                 error_message=str(e),
@@ -151,9 +163,7 @@ class NougatExtractor(ExtractorInterface):
                 end_page = min(start_page + self.chunk_size - 1, self.max_pages)
 
                 try:
-                    chunk_content = self._extract_chunk(
-                        pdf_path, start_page, end_page, temp_path
-                    )
+                    chunk_content = self._extract_chunk(pdf_path, start_page, end_page, temp_path)
 
                     if chunk_content and len(chunk_content) > self.min_content_length:
                         # Add page delimiter
@@ -186,9 +196,7 @@ class NougatExtractor(ExtractorInterface):
             "total_pages_processed": len(successful_chunks) * self.chunk_size,
         }
 
-    def _extract_chunk(
-        self, pdf_path: Path, start_page: int, end_page: int, temp_dir: Path
-    ) -> str:
+    def _extract_chunk(self, pdf_path: Path, start_page: int, end_page: int, temp_dir: Path) -> str:
         """Extract a single chunk of pages.
 
         Args:

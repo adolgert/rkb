@@ -261,20 +261,20 @@ class CompletePipeline:
 
             # Calculate statistics for CLI compatibility
             proc_stats = pipeline_results["steps"]["process_documents"]
-            total_processed = proc_stats['total_files']
-            successful_extractions = proc_stats['successful']
-            failed_extractions = proc_stats['errors']
+            total_processed = proc_stats["total_files"]
+            successful_extractions = proc_stats["successful"]
+            failed_extractions = proc_stats["errors"]
 
             # Count embeddings from processing results
             successful_embeddings = 0
             failed_embeddings = 0
-            for result in proc_stats.get('results', []):
-                if result.get('status') == 'success' and not result.get('embedding_skipped', False):
+            for result in proc_stats.get("results", []):
+                if result.get("status") == "success" and not result.get("embedding_skipped", False):
                     successful_embeddings += 1
-                elif result.get('status') == 'success' and result.get('embedding_skipped', False):
+                elif result.get("status") == "success" and result.get("embedding_skipped", False):
                     # Extraction succeeded but embedding was skipped
                     pass
-                elif result.get('status') == 'error':
+                elif result.get("status") == "error":
                     # Could be extraction or embedding failure - need more granular tracking
                     failed_embeddings += 1
 
@@ -459,24 +459,23 @@ class CompletePipeline:
                 "failed_embeddings": failed_embeddings,
                 "results": results,
             }
-        else:
-            # Regular processing
-            pdf_list = [str(path) for path in pdf_paths]
-            results = self.ingestion_pipeline.process_batch(
-                pdf_list=pdf_list,
-                force_reprocess=force_reprocess
-            )
+        # Regular processing
+        pdf_list = [str(path) for path in pdf_paths]
+        results = self.ingestion_pipeline.process_batch(
+            pdf_list=pdf_list,
+            force_reprocess=force_reprocess
+        )
 
-            # Count results
-            successful = len([r for r in results if r.get('status') == 'success'])
-            failed = len([r for r in results if r.get('status') == 'error'])
+        # Count results
+        successful = len([r for r in results if r.get("status") == "success"])
+        failed = len([r for r in results if r.get("status") == "error"])
 
-            # For full processing, successful extractions = successful embeddings
-            return {
-                "documents_processed": len(pdf_paths),
-                "successful_extractions": successful,
-                "failed_extractions": failed,
-                "successful_embeddings": successful,
-                "failed_embeddings": failed,
-                "results": results,
-            }
+        # For full processing, successful extractions = successful embeddings
+        return {
+            "documents_processed": len(pdf_paths),
+            "successful_extractions": successful,
+            "failed_extractions": failed,
+            "successful_embeddings": successful,
+            "failed_embeddings": failed,
+            "results": results,
+        }

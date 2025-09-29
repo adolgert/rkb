@@ -4,16 +4,15 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import Any
 
 from rkb.cli.commands import (
-    pipeline_cmd,
-    search_cmd,
-    index_cmd,
-    find_cmd,
-    extract_cmd,
-    project_cmd,
     experiment_cmd,
+    extract_cmd,
+    find_cmd,
+    index_cmd,
+    pipeline_cmd,
+    project_cmd,
+    search_cmd,
 )
 
 
@@ -132,21 +131,20 @@ def main(args: list[str] | None = None) -> int:
     try:
         if parsed_args.command == "pipeline":
             return pipeline_cmd.execute(parsed_args)
-        elif parsed_args.command == "search":
+        if parsed_args.command == "search":
             return search_cmd.execute(parsed_args)
-        elif parsed_args.command == "index":
+        if parsed_args.command == "index":
             return index_cmd.execute(parsed_args)
-        elif parsed_args.command == "find":
+        if parsed_args.command == "find":
             return find_cmd.execute(parsed_args)
-        elif parsed_args.command == "extract":
+        if parsed_args.command == "extract":
             return extract_cmd.execute(parsed_args)
-        elif parsed_args.command == "project":
+        if parsed_args.command == "project":
             return project_cmd.execute(parsed_args)
-        elif parsed_args.command == "experiment":
+        if parsed_args.command == "experiment":
             return experiment_cmd.execute(parsed_args)
-        else:
-            print(f"Unknown command: {parsed_args.command}")
-            return 1
+        print(f"Unknown command: {parsed_args.command}")
+        return 1
 
     except KeyboardInterrupt:
         print("\nOperation cancelled by user.")

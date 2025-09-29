@@ -125,8 +125,7 @@ class ProjectService:
             # Get documents by status and filter by project
             all_docs = self.registry.get_documents_by_status(status)
             return [doc for doc in all_docs if getattr(doc, "project_id", None) == project_id]
-        else:
-            return self.registry.get_documents_by_project(project_id)
+        return self.registry.get_documents_by_project(project_id)
 
     def find_recent_pdfs(
         self,

@@ -1,7 +1,6 @@
 """Experiment command - Manage experiments and comparisons."""
 
 import argparse
-import json
 from pathlib import Path
 
 from rkb.core.document_registry import DocumentRegistry
@@ -68,17 +67,16 @@ def execute(args: argparse.Namespace) -> int:
 
         if args.action == "create":
             return _create_experiment(experiment_service, args)
-        elif args.action == "list":
+        if args.action == "list":
             return _list_experiments(experiment_service, args)
-        elif args.action == "run":
+        if args.action == "run":
             return _run_experiment(experiment_service, args)
-        elif args.action == "compare":
+        if args.action == "compare":
             return _compare_experiments(experiment_service, args)
-        elif args.action == "summary":
+        if args.action == "summary":
             return _show_summary(experiment_service, args)
-        else:
-            print(f"Unknown action: {args.action}")
-            return 1
+        print(f"Unknown action: {args.action}")
+        return 1
 
     except Exception as e:
         print(f"✗ Experiment command failed: {e}")
@@ -172,14 +170,14 @@ def _show_summary(service: ExperimentService, args: argparse.Namespace) -> int:
     print("=" * 30)
     print(f"Total experiments: {summary['total_experiments']}")
 
-    if summary['embedder_distribution']:
+    if summary["embedder_distribution"]:
         print("\nEmbedder distribution:")
-        for embedder, count in summary['embedder_distribution'].items():
+        for embedder, count in summary["embedder_distribution"].items():
             print(f"  {embedder}: {count}")
 
-    if summary['extractor_distribution']:
+    if summary["extractor_distribution"]:
         print("\nExtractor distribution:")
-        for extractor, count in summary['extractor_distribution'].items():
+        for extractor, count in summary["extractor_distribution"].items():
             print(f"  {extractor}: {count}")
 
     return 0

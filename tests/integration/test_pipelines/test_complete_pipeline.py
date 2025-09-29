@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from rkb.core.document_registry import DocumentRegistry
-from rkb.core.models import ExtractionResult, EmbeddingResult
+from rkb.core.models import EmbeddingResult, ExtractionResult
 from rkb.pipelines.complete_pipeline import CompletePipeline
 
 
@@ -144,8 +144,8 @@ class TestCompletePipeline:
 
     def test_run_pipeline_success(self, temp_db, temp_data_dir, mock_extractor, mock_embedder):
         """Test successful pipeline run."""
-        with patch('rkb.pipelines.ingestion_pipeline.get_extractor', return_value=mock_extractor), \
-             patch('rkb.pipelines.ingestion_pipeline.get_embedder', return_value=mock_embedder):
+        with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
+             patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
             pipeline = CompletePipeline(
                 registry=temp_db,
@@ -199,8 +199,8 @@ class TestCompletePipeline:
 
     def test_validate_prerequisites_success(self, temp_data_dir, mock_extractor, mock_embedder):
         """Test successful prerequisites validation."""
-        with patch('rkb.pipelines.ingestion_pipeline.get_extractor', return_value=mock_extractor), \
-             patch('rkb.pipelines.ingestion_pipeline.get_embedder', return_value=mock_embedder):
+        with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
+             patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
             pipeline = CompletePipeline(
                 extractor_name="mock_extractor",
@@ -213,8 +213,8 @@ class TestCompletePipeline:
 
     def test_validate_prerequisites_no_data_dir(self, mock_extractor, mock_embedder):
         """Test prerequisites validation with missing data directory."""
-        with patch('rkb.pipelines.ingestion_pipeline.get_extractor', return_value=mock_extractor), \
-             patch('rkb.pipelines.ingestion_pipeline.get_embedder', return_value=mock_embedder):
+        with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
+             patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
             pipeline = CompletePipeline(
                 extractor_name="mock_extractor",
@@ -228,8 +228,8 @@ class TestCompletePipeline:
     def test_validate_prerequisites_no_pdfs(self, mock_extractor, mock_embedder):
         """Test prerequisites validation with no PDFs."""
         with tempfile.TemporaryDirectory() as temp_dir, \
-             patch('rkb.pipelines.ingestion_pipeline.get_extractor', return_value=mock_extractor), \
-             patch('rkb.pipelines.ingestion_pipeline.get_embedder', return_value=mock_embedder):
+             patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
+             patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
             empty_dir = Path(temp_dir) / "empty"
             empty_dir.mkdir()
@@ -245,8 +245,8 @@ class TestCompletePipeline:
 
     def test_get_project_summary(self, temp_db, temp_data_dir, mock_extractor, mock_embedder):
         """Test getting project summary."""
-        with patch('rkb.pipelines.ingestion_pipeline.get_extractor', return_value=mock_extractor), \
-             patch('rkb.pipelines.ingestion_pipeline.get_embedder', return_value=mock_embedder):
+        with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
+             patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
             pipeline = CompletePipeline(
                 registry=temp_db,
@@ -280,8 +280,8 @@ class TestCompletePipeline:
             log_file = Path(f.name)
 
         try:
-            with patch('rkb.pipelines.ingestion_pipeline.get_extractor', return_value=mock_extractor), \
-                 patch('rkb.pipelines.ingestion_pipeline.get_embedder', return_value=mock_embedder):
+            with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
+                 patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
                 pipeline = CompletePipeline(
                     registry=temp_db,

@@ -68,43 +68,39 @@ class IngestionPipeline:
                 "source_path": str(source_path),
             }
 
-        # Check if document already exists
-        if not force_reprocess and self.registry.document_exists(source_path):
-            return {
-                "status": "skipped",
-                "message": "Document already processed",
-                "source_path": str(source_path),
-            }
-
         start_time = time.time()
 
         try:
-            # Create document record
-            document = Document(
-                source_path=source_path,
-                status=DocumentStatus.EXTRACTING,
-            )
-            # Set project_id as attribute (used by registry)
-            if self.project_id:
-                document.project_id = self.project_id
+            # Check if document already exists using the new method
+            document, is_new = self.registry.process_new_document(source_path, self.project_id)
 
-            # Add to registry
-            if not self.registry.add_document(document):
-                # Document already exists, get it
-                existing_doc = self.registry.get_document_by_path(source_path)
-                if existing_doc and not force_reprocess:
-                    return {
-                        "status": "skipped",
-                        "message": "Document already in registry",
-                        "source_path": str(source_path),
-                        "doc_id": existing_doc.doc_id,
-                    }
-                document = existing_doc
+            if document.status == DocumentStatus.INDEXED and not force_reprocess:
+                return {
+                    "status": "skipped",
+                    "message": "Document already fully processed",
+                    "source_path": str(source_path),
+                    "doc_id": document.doc_id,
+                }
 
-            print(f"🔄 Processing: {source_path.name}")
+            if not is_new and not force_reprocess:
+                return {
+                    "status": "duplicate",
+                    "message": "Document already exists with content hash",
+                    "source_path": str(source_path),
+                    "doc_id": document.doc_id,
+                    "content_hash": document.content_hash,
+                }
 
-            # Extract content
-            extraction_result = self.extractor.extract(source_path)
+            print(f"🔄 Processing: {source_path.name} (doc_id: {document.doc_id[:8]}...)")
+
+            # Update document status
+            self.registry.update_document_status(document.doc_id, DocumentStatus.EXTRACTING)
+
+            # Extract content - pass doc_id for consistent naming
+            extraction_result = self.extractor.extract(source_path, document.doc_id)
+
+            # Set document ID in extraction result
+            extraction_result.doc_id = document.doc_id
 
             if extraction_result.status.value != "complete":
                 # Update document status to failed
@@ -172,7 +168,9 @@ class IngestionPipeline:
                 "extraction_id": extraction_result.extraction_id,
                 "chunk_count": chunk_count,
                 "valid_chunk_count": valid_chunk_count,
-                "has_equations": equation_info["has_equations"] if extraction_result.content else False,
+                "has_equations": equation_info["has_equations"]
+                if extraction_result.content
+                else False,
                 "processing_time": round(processing_time, 1),
                 "timestamp": datetime.now().isoformat(),
                 "embedding_skipped": self.skip_embedding,
@@ -292,9 +290,9 @@ class IngestionPipeline:
         print(f"   Successful: {success_count}")
         print(f"   Errors: {error_count}")
         print(f"   Skipped: {skip_count}")
-        print(f"   Total time: {total_time/60:.1f} minutes")
+        print(f"   Total time: {total_time / 60:.1f} minutes")
         if success_count > 0:
-            print(f"   Avg time per file: {total_time/success_count:.1f}s")
+            print(f"   Avg time per file: {total_time / success_count:.1f}s")
 
         if log_file:
             print(f"\n💾 Results saved to: {log_file}")
@@ -310,11 +308,13 @@ class IngestionPipeline:
         stats = self.registry.get_processing_stats()
 
         # Add pipeline-specific information
-        stats.update({
-            "extractor": self.extractor_name,
-            "embedder": self.embedder_name,
-            "project_id": self.project_id,
-        })
+        stats.update(
+            {
+                "extractor": self.extractor_name,
+                "embedder": self.embedder_name,
+                "project_id": self.project_id,
+            }
+        )
 
         return stats
 

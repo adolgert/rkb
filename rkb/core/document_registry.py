@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from rkb.core.models import Document, DocumentStatus, ExtractionResult, EmbeddingResult
+from rkb.core.models import Document, DocumentStatus, EmbeddingResult, ExtractionResult
 
 
 class DocumentRegistry:
@@ -36,8 +36,7 @@ class DocumentRegistry:
                     status TEXT DEFAULT 'pending',
                     added_date TEXT NOT NULL,
                     updated_date TEXT NOT NULL,
-                    project_id TEXT,
-                    UNIQUE(source_path)
+                    project_id TEXT
                 )
             """)
 
@@ -74,7 +73,9 @@ class DocumentRegistry:
             """)
 
             # Create indexes for better performance
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_project ON documents (project_id)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_documents_project ON documents (project_id)"
+            )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_status ON documents (status)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_extractions_doc ON extractions (doc_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_doc ON embeddings (doc_id)")
@@ -90,28 +91,33 @@ class DocumentRegistry:
         """
         try:
             with sqlite3.connect(self.db_path) as conn:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO documents (
                         doc_id, source_path, content_hash, title, authors,
                         arxiv_id, doi, version, status, added_date, updated_date, project_id
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    document.doc_id,
-                    str(document.source_path) if document.source_path else None,
-                    document.content_hash,
-                    document.title,
-                    ",".join(document.authors) if document.authors else None,
-                    document.arxiv_id,
-                    document.doi,
-                    document.version,
-                    document.status.value,
-                    document.added_date.isoformat(),
-                    datetime.now().isoformat(),
-                    getattr(document, 'project_id', None),
-                ))
+                """,
+                    (
+                        document.doc_id,
+                        str(document.source_path) if document.source_path else None,
+                        document.content_hash,
+                        document.title,
+                        ",".join(document.authors) if document.authors else None,
+                        document.arxiv_id,
+                        document.doi,
+                        document.version,
+                        document.status.value,
+                        document.added_date.isoformat(),
+                        datetime.now().isoformat(),
+                        getattr(document, "project_id", None),
+                    ),
+                )
                 return True
-        except sqlite3.IntegrityError:
-            return False  # Document already exists
+        except sqlite3.IntegrityError as e:
+            # Handle case where doc_id already exists (should be rare with UUIDs)
+            print(f"Document ID collision: {e}")
+            return False
 
     def get_document(self, doc_id: str) -> Document | None:
         """Get a document by ID.
@@ -124,23 +130,27 @@ class DocumentRegistry:
         """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 SELECT * FROM documents WHERE doc_id = ?
-            """, (doc_id,))
+            """,
+                (doc_id,),
+            )
             row = cursor.fetchone()
 
             if row:
                 return Document(
-                    doc_id=row['doc_id'],
-                    source_path=Path(row['source_path']) if row['source_path'] else None,
-                    content_hash=row['content_hash'],
-                    title=row['title'],
-                    authors=row['authors'].split(',') if row['authors'] else [],
-                    arxiv_id=row['arxiv_id'],
-                    doi=row['doi'],
-                    version=row['version'],
-                    status=DocumentStatus(row['status']),
-                    added_date=datetime.fromisoformat(row['added_date']),
+                    doc_id=row["doc_id"],
+                    source_path=Path(row["source_path"]) if row["source_path"] else None,
+                    content_hash=row["content_hash"],
+                    title=row["title"],
+                    authors=row["authors"].split(",") if row["authors"] else [],
+                    arxiv_id=row["arxiv_id"],
+                    doi=row["doi"],
+                    version=row["version"],
+                    status=DocumentStatus(row["status"]),
+                    added_date=datetime.fromisoformat(row["added_date"]),
+                    project_id=row["project_id"],
                 )
             return None
 
@@ -155,11 +165,14 @@ class DocumentRegistry:
             True if updated successfully
         """
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 UPDATE documents
                 SET status = ?, updated_date = ?
                 WHERE doc_id = ?
-            """, (status.value, datetime.now().isoformat(), doc_id))
+            """,
+                (status.value, datetime.now().isoformat(), doc_id),
+            )
             return cursor.rowcount > 0
 
     def add_extraction(self, extraction: ExtractionResult) -> bool:
@@ -173,23 +186,26 @@ class DocumentRegistry:
         """
         try:
             with sqlite3.connect(self.db_path) as conn:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO extractions (
                         extraction_id, doc_id, extractor_name, extractor_version,
                         extraction_path, content, page_count, status, error_message, extraction_date
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    extraction.extraction_id,
-                    extraction.doc_id,
-                    extraction.extractor_name,
-                    extraction.extractor_version,
-                    str(extraction.extraction_path) if extraction.extraction_path else None,
-                    extraction.content,
-                    extraction.page_count,
-                    extraction.status.value,
-                    extraction.error_message,
-                    extraction.extraction_date.isoformat(),
-                ))
+                """,
+                    (
+                        extraction.extraction_id,
+                        extraction.doc_id,
+                        extraction.extractor_name,
+                        extraction.extractor_version,
+                        str(extraction.extraction_path) if extraction.extraction_path else None,
+                        extraction.content,
+                        extraction.page_count,
+                        extraction.status.value,
+                        extraction.error_message,
+                        extraction.extraction_date.isoformat(),
+                    ),
+                )
                 return True
         except sqlite3.IntegrityError:
             return False
@@ -205,22 +221,27 @@ class DocumentRegistry:
         """
         try:
             with sqlite3.connect(self.db_path) as conn:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO embeddings (
                         embedding_id, doc_id, extraction_id, embedder_name, embedder_version,
                         vector_db_path, chunk_count, embedding_date, error_message
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    embedding.embedding_id,
-                    embedding.doc_id,
-                    getattr(embedding, 'extraction_id', None),
-                    embedding.embedder_name,
-                    "1.0.0",  # Default version since EmbeddingResult doesn't have embedder_version
-                    str(embedding.vector_db_path) if embedding.vector_db_path else None,
-                    embedding.chunk_count,
-                    embedding.indexed_date.isoformat() if embedding.indexed_date else datetime.now().isoformat(),
-                    embedding.error_message,
-                ))
+                """,
+                    (
+                        embedding.embedding_id,
+                        embedding.doc_id,
+                        getattr(embedding, "extraction_id", None),
+                        embedding.embedder_name,
+                        "1.0.0",  # Default version since EmbeddingResult doesn't have embedder_version
+                        str(embedding.vector_db_path) if embedding.vector_db_path else None,
+                        embedding.chunk_count,
+                        embedding.indexed_date.isoformat()
+                        if embedding.indexed_date
+                        else datetime.now().isoformat(),
+                        embedding.error_message,
+                    ),
+                )
                 return True
         except sqlite3.IntegrityError:
             return False
@@ -237,25 +258,30 @@ class DocumentRegistry:
         documents = []
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 SELECT * FROM documents WHERE project_id = ?
                 ORDER BY added_date DESC
-            """, (project_id,))
+            """,
+                (project_id,),
+            )
 
             for row in cursor.fetchall():
-                documents.append(Document(
-                    doc_id=row['doc_id'],
-                    source_path=Path(row['source_path']) if row['source_path'] else None,
-                    content_hash=row['content_hash'],
-                    title=row['title'],
-                    authors=row['authors'].split(',') if row['authors'] else [],
-                    arxiv_id=row['arxiv_id'],
-                    doi=row['doi'],
-                    version=row['version'],
-                    status=DocumentStatus(row['status']),
-                    added_date=datetime.fromisoformat(row['added_date']),
-                    project_id=row['project_id'],
-                ))
+                documents.append(
+                    Document(
+                        doc_id=row["doc_id"],
+                        source_path=Path(row["source_path"]) if row["source_path"] else None,
+                        content_hash=row["content_hash"],
+                        title=row["title"],
+                        authors=row["authors"].split(",") if row["authors"] else [],
+                        arxiv_id=row["arxiv_id"],
+                        doi=row["doi"],
+                        version=row["version"],
+                        status=DocumentStatus(row["status"]),
+                        added_date=datetime.fromisoformat(row["added_date"]),
+                        project_id=row["project_id"],
+                    )
+                )
 
         return documents
 
@@ -271,25 +297,30 @@ class DocumentRegistry:
         documents = []
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 SELECT * FROM documents WHERE status = ?
                 ORDER BY added_date DESC
-            """, (status.value,))
+            """,
+                (status.value,),
+            )
 
             for row in cursor.fetchall():
-                documents.append(Document(
-                    doc_id=row['doc_id'],
-                    source_path=Path(row['source_path']) if row['source_path'] else None,
-                    content_hash=row['content_hash'],
-                    title=row['title'],
-                    authors=row['authors'].split(',') if row['authors'] else [],
-                    arxiv_id=row['arxiv_id'],
-                    doi=row['doi'],
-                    version=row['version'],
-                    status=DocumentStatus(row['status']),
-                    added_date=datetime.fromisoformat(row['added_date']),
-                    project_id=row['project_id'],
-                ))
+                documents.append(
+                    Document(
+                        doc_id=row["doc_id"],
+                        source_path=Path(row["source_path"]) if row["source_path"] else None,
+                        content_hash=row["content_hash"],
+                        title=row["title"],
+                        authors=row["authors"].split(",") if row["authors"] else [],
+                        arxiv_id=row["arxiv_id"],
+                        doi=row["doi"],
+                        version=row["version"],
+                        status=DocumentStatus(row["status"]),
+                        added_date=datetime.fromisoformat(row["added_date"]),
+                        project_id=row["project_id"],
+                    )
+                )
 
         return documents
 
@@ -303,9 +334,12 @@ class DocumentRegistry:
             True if document exists
         """
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 SELECT 1 FROM documents WHERE source_path = ?
-            """, (str(source_path),))
+            """,
+                (str(source_path),),
+            )
             return cursor.fetchone() is not None
 
     def get_document_by_path(self, source_path: Path) -> Document | None:
@@ -319,25 +353,172 @@ class DocumentRegistry:
         """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 SELECT * FROM documents WHERE source_path = ?
-            """, (str(source_path),))
+            """,
+                (str(source_path),),
+            )
             row = cursor.fetchone()
 
             if row:
                 return Document(
-                    doc_id=row['doc_id'],
-                    source_path=Path(row['source_path']) if row['source_path'] else None,
-                    content_hash=row['content_hash'],
-                    title=row['title'],
-                    authors=row['authors'].split(',') if row['authors'] else [],
-                    arxiv_id=row['arxiv_id'],
-                    doi=row['doi'],
-                    version=row['version'],
-                    status=DocumentStatus(row['status']),
-                    added_date=datetime.fromisoformat(row['added_date']),
+                    doc_id=row["doc_id"],
+                    source_path=Path(row["source_path"]) if row["source_path"] else None,
+                    content_hash=row["content_hash"],
+                    title=row["title"],
+                    authors=row["authors"].split(",") if row["authors"] else [],
+                    arxiv_id=row["arxiv_id"],
+                    doi=row["doi"],
+                    version=row["version"],
+                    status=DocumentStatus(row["status"]),
+                    added_date=datetime.fromisoformat(row["added_date"]),
+                    project_id=row["project_id"],
                 )
             return None
+
+    def find_by_content_hash(self, content_hash: str) -> Document | None:
+        """Find document by content hash.
+
+        Args:
+            content_hash: SHA-256 content hash
+
+        Returns:
+            Document if found, None otherwise
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(
+                """
+                SELECT * FROM documents WHERE content_hash = ?
+            """,
+                (content_hash,),
+            )
+            row = cursor.fetchone()
+
+            if row:
+                return Document(
+                    doc_id=row["doc_id"],
+                    source_path=Path(row["source_path"]) if row["source_path"] else None,
+                    content_hash=row["content_hash"],
+                    title=row["title"],
+                    authors=row["authors"].split(",") if row["authors"] else [],
+                    arxiv_id=row["arxiv_id"],
+                    doi=row["doi"],
+                    version=row["version"],
+                    status=DocumentStatus(row["status"]),
+                    added_date=datetime.fromisoformat(row["added_date"]),
+                    project_id=row["project_id"],
+                )
+            return None
+
+    def add_document_reference(self, existing_doc: Document, new_source_path: Path) -> Document:
+        """Add a new source path reference to existing document.
+
+        Args:
+            existing_doc: Existing document to reference
+            new_source_path: New source path that references same content
+
+        Returns:
+            The existing document (unchanged for now)
+
+        Note:
+            For now, just updates the existing document's source_path if needed.
+            In future, could maintain multiple source references.
+        """
+        print(f"📋 Linking duplicate: {new_source_path} -> {existing_doc.doc_id}")
+        return existing_doc
+
+    def process_new_document(
+        self, source_path: Path, project_id: str | None = None
+    ) -> tuple[Document, bool]:
+        """Process new document with deduplication.
+
+        Args:
+            source_path: Path to the source document
+            project_id: Optional project identifier
+
+        Returns:
+            (Document, is_new) - Document object and whether it was newly created
+        """
+        from rkb.core.identity import DocumentIdentity
+
+        # Create identity object
+        doc_identity = DocumentIdentity(source_path)
+
+        # Check for existing document with same content
+        existing_doc = self.find_by_content_hash(doc_identity.content_hash)
+        if existing_doc:
+            # Link to existing document
+            linked_doc = self.add_document_reference(existing_doc, source_path)
+            return linked_doc, False
+
+        # Create new document
+        document = Document(
+            doc_id=doc_identity.doc_id,
+            source_path=source_path,
+            content_hash=doc_identity.content_hash,
+            status=DocumentStatus.PENDING,
+            project_id=project_id,
+        )
+
+        # Add to registry
+        success = self.add_document(document)
+        return document, success
+
+    def update_document_content_hash(self, doc_id: str, content_hash: str) -> bool:
+        """Update document content hash.
+
+        Args:
+            doc_id: Document identifier
+            content_hash: SHA-256 content hash
+
+        Returns:
+            True if updated successfully
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                """
+                UPDATE documents
+                SET content_hash = ?, updated_date = ?
+                WHERE doc_id = ?
+            """,
+                (content_hash, datetime.now().isoformat(), doc_id),
+            )
+            return cursor.rowcount > 0
+
+    def get_all_documents(self) -> list[Document]:
+        """Get all documents in the registry.
+
+        Returns:
+            List of all documents
+        """
+        documents = []
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute("""
+                SELECT * FROM documents
+                ORDER BY added_date DESC
+            """)
+
+            for row in cursor.fetchall():
+                documents.append(
+                    Document(
+                        doc_id=row["doc_id"],
+                        source_path=Path(row["source_path"]) if row["source_path"] else None,
+                        content_hash=row["content_hash"],
+                        title=row["title"],
+                        authors=row["authors"].split(",") if row["authors"] else [],
+                        arxiv_id=row["arxiv_id"],
+                        doi=row["doi"],
+                        version=row["version"],
+                        status=DocumentStatus(row["status"]),
+                        added_date=datetime.fromisoformat(row["added_date"]),
+                        project_id=row["project_id"],
+                    )
+                )
+
+        return documents
 
     def get_processing_stats(self) -> dict[str, Any]:
         """Get processing statistics.

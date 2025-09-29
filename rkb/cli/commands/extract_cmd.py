@@ -58,7 +58,7 @@ def execute(args: argparse.Namespace) -> int:
             if not file_path.exists():
                 print(f"✗ File not found: {file_path}")
                 return 1
-            if file_path.suffix.lower() != '.pdf':
+            if file_path.suffix.lower() != ".pdf":
                 print(f"✗ Not a PDF file: {file_path}")
                 return 1
             pdf_files.append(file_path)
@@ -91,9 +91,9 @@ def execute(args: argparse.Namespace) -> int:
         print("=" * 50)
 
         # Count results by status
-        successful = len([r for r in results if r.get('status') == 'success'])
-        failed = len([r for r in results if r.get('status') == 'error'])
-        skipped = len([r for r in results if r.get('status') == 'skipped'])
+        successful = len([r for r in results if r.get("status") == "success"])
+        failed = len([r for r in results if r.get("status") == "error"])
+        skipped = len([r for r in results if r.get("status") == "skipped"])
 
         print(f"📄 Documents processed: {len(results)}")
         print(f"✅ Successful extractions: {successful}")
@@ -101,8 +101,8 @@ def execute(args: argparse.Namespace) -> int:
         print(f"⏭️  Skipped: {skipped}")
 
         if successful > 0:
-            print(f"\n✨ Extraction complete! Documents status: EXTRACTED")
-            print(f"To create embeddings and enable search, run: rkb index")
+            print("\n✨ Extraction complete! Documents status: EXTRACTED")
+            print("To create embeddings and enable search, run: rkb index")
             if args.project_id:
                 print(f"Or run: rkb index --project-id {args.project_id}")
 

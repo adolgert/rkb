@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from rkb.core.document_registry import DocumentRegistry
-from rkb.core.models import ExperimentConfig, SearchResult, ComparisonResult
+from rkb.core.models import ComparisonResult, ExperimentConfig, SearchResult
 from rkb.services.search_service import SearchService
 
 
@@ -205,7 +205,7 @@ class ExperimentService:
             metrics=metrics_data,
         )
 
-        print(f"\n📈 Comparison completed")
+        print("\n📈 Comparison completed")
         self._display_comparison_summary(comparison_result, experiments)
 
         return comparison_result
@@ -297,7 +297,7 @@ class ExperimentService:
             print(f"  Strategy: {exp.search_strategy}")
 
         # Show metrics
-        print(f"\nMETRICS:")
+        print("\nMETRICS:")
         for metric_name, metric_data in comparison.metrics.items():
             print(f"\n{metric_name.replace('_', ' ').title()}:")
             sorted_results = sorted(metric_data.items(), key=lambda x: x[1], reverse=True)

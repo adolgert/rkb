@@ -3,8 +3,6 @@
 from datetime import datetime
 from pathlib import Path
 
-import pytest
-
 from rkb.core.models import (
     ChunkMetadata,
     ChunkResult,

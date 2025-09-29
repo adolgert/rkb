@@ -5,17 +5,17 @@ ensuring functional parity with the original nugget prototype.
 """
 
 import tempfile
-import pytest
 from pathlib import Path
-from unittest.mock import Mock, patch
-import json
+from unittest.mock import Mock
+
+import pytest
 
 from rkb.core.document_registry import DocumentRegistry
 from rkb.core.models import DocumentStatus, ExtractionStatus
+from rkb.pipelines.complete_pipeline import CompletePipeline
+from rkb.services.experiment_service import ExperimentService
 from rkb.services.project_service import ProjectService
 from rkb.services.search_service import SearchService
-from rkb.services.experiment_service import ExperimentService
-from rkb.pipelines.complete_pipeline import CompletePipeline
 
 
 class TestCompleteWorkflow:
@@ -43,13 +43,13 @@ class TestCompleteWorkflow:
     def mock_dependencies(self):
         """Mock external dependencies for testing."""
         mocks = {
-            'nougat_extractor': Mock(),
-            'chroma_embedder': Mock(),
-            'chroma_client': Mock(),
+            "nougat_extractor": Mock(),
+            "chroma_embedder": Mock(),
+            "chroma_client": Mock(),
         }
 
         # Configure extractor mock
-        mocks['nougat_extractor'].extract.return_value = Mock(
+        mocks["nougat_extractor"].extract.return_value = Mock(
             extraction_id="test_extraction",
             content="Mock extracted content from PDF",
             page_count=5,
@@ -58,7 +58,7 @@ class TestCompleteWorkflow:
         )
 
         # Configure embedder mock
-        mocks['chroma_embedder'].embed.return_value = Mock(
+        mocks["chroma_embedder"].embed.return_value = Mock(
             embedding_id="test_embedding",
             embeddings=[[0.1, 0.2, 0.3] * 128],  # Mock 384-dim embedding
             chunk_count=3,
@@ -69,14 +69,14 @@ class TestCompleteWorkflow:
         collection_mock = Mock()
         collection_mock.count.return_value = 3
         collection_mock.query.return_value = {
-            'documents': [["Test document content"]],
-            'metadatas': [[{"pdf_name": "test_paper_0.pdf", "chunk_index": 0}]],
-            'distances': [[0.2]],
-            'ids': [["chunk_1"]],
+            "documents": [["Test document content"]],
+            "metadatas": [[{"pdf_name": "test_paper_0.pdf", "chunk_index": 0}]],
+            "distances": [[0.2]],
+            "ids": [["chunk_1"]],
         }
 
-        mocks['chroma_client'].get_collection.return_value = collection_mock
-        mocks['collection'] = collection_mock
+        mocks["chroma_client"].get_collection.return_value = collection_mock
+        mocks["collection"] = collection_mock
 
         return mocks
 
@@ -113,7 +113,7 @@ class TestCompleteWorkflow:
         assert all(f["project_id"] == project_id for f in files)
 
         # Step 3: Test Registry Direct Operations
-        from rkb.core.models import Document, ExtractionResult, EmbeddingResult
+        from rkb.core.models import Document
 
         # Create test documents manually to test registry operations
         test_docs = []

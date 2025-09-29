@@ -1,7 +1,6 @@
 """Project command - Manage document projects."""
 
 import argparse
-import json
 from pathlib import Path
 
 from rkb.core.document_registry import DocumentRegistry
@@ -74,19 +73,18 @@ def execute(args: argparse.Namespace) -> int:
 
         if args.action == "create":
             return _create_project(project_service, args)
-        elif args.action == "list":
+        if args.action == "list":
             return _list_projects(project_service, args)
-        elif args.action == "show":
+        if args.action == "show":
             return _show_project(project_service, args)
-        elif args.action == "find-pdfs":
+        if args.action == "find-pdfs":
             return _find_pdfs(project_service, args)
-        elif args.action == "subset":
+        if args.action == "subset":
             return _create_subset(project_service, args)
-        elif args.action == "export":
+        if args.action == "export":
             return _export_project(project_service, args)
-        else:
-            print(f"Unknown action: {args.action}")
-            return 1
+        print(f"Unknown action: {args.action}")
+        return 1
 
     except Exception as e:
         print(f"✗ Project command failed: {e}")
