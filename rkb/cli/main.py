@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Main CLI entry point for the RKB (Research Knowledge Base) system."""
+# ruff: noqa: T201
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -122,10 +124,13 @@ def main(args: list[str] | None = None) -> int:
         parser.print_help()
         return 1
 
-    # Set up global configuration
-    if parsed_args.verbose:
-        import logging
-        logging.basicConfig(level=logging.DEBUG)
+    # Set up logging configuration
+    log_level = logging.DEBUG if parsed_args.verbose else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
 
     # Route to appropriate command handler
     try:

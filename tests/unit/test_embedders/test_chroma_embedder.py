@@ -5,8 +5,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from rkb.embedders.chroma_embedder import ChromaEmbedder
 
 
@@ -63,10 +61,10 @@ class TestChromaEmbedder:
     def test_embed_import_error(self):
         """Test embedding when ChromaDB is not installed."""
         # Remove chromadb from sys.modules if it exists
-        chromadb_module = sys.modules.pop('chromadb', None)
+        chromadb_module = sys.modules.pop("chromadb", None)
 
         try:
-            with patch.dict(sys.modules, {'chromadb': None}):
+            with patch.dict(sys.modules, {"chromadb": None}):
                 embedder = ChromaEmbedder()
                 result = embedder.embed(["test text"])
 
@@ -76,7 +74,7 @@ class TestChromaEmbedder:
         finally:
             # Restore chromadb module if it existed
             if chromadb_module is not None:
-                sys.modules['chromadb'] = chromadb_module
+                sys.modules["chromadb"] = chromadb_module
 
     def test_embed_successful_new_collection(self):
         """Test successful embedding with new collection."""
@@ -92,7 +90,7 @@ class TestChromaEmbedder:
         mock_client.create_collection.return_value = mock_collection
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch.dict(sys.modules, {'chromadb': mock_chromadb}):
+            with patch.dict(sys.modules, {"chromadb": mock_chromadb}):
                 embedder = ChromaEmbedder(db_path=temp_dir)
                 result = embedder.embed(["text1", "text2"])
 
@@ -117,7 +115,7 @@ class TestChromaEmbedder:
         mock_client.get_collection.return_value = mock_collection
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch.dict(sys.modules, {'chromadb': mock_chromadb}):
+            with patch.dict(sys.modules, {"chromadb": mock_chromadb}):
                 embedder = ChromaEmbedder(db_path=temp_dir)
                 result = embedder.embed(["text1"])
 

@@ -1,4 +1,5 @@
 """Project command - Manage document projects."""
+# ruff: noqa: T201
 
 import argparse
 from pathlib import Path
@@ -22,7 +23,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     create_parser.add_argument("--data-dir", type=Path, help="Project data directory")
 
     # List projects
-    list_parser = subparsers.add_parser("list", help="List all projects")
+    subparsers.add_parser("list", help="List all projects")
 
     # Show project details
     show_parser = subparsers.add_parser("show", help="Show project details")

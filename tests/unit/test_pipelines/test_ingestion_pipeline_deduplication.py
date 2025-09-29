@@ -3,11 +3,12 @@
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
+
 import pytest
 
-from rkb.pipelines.ingestion_pipeline import IngestionPipeline
 from rkb.core.document_registry import DocumentRegistry
-from rkb.core.models import Document, DocumentStatus, ExtractionResult, ExtractionStatus
+from rkb.core.models import DocumentStatus, ExtractionResult, ExtractionStatus
+from rkb.pipelines.ingestion_pipeline import IngestionPipeline
 
 
 class TestIngestionPipelineDeduplication:
@@ -16,7 +17,7 @@ class TestIngestionPipelineDeduplication:
     @pytest.fixture
     def temp_registry(self):
         """Create temporary registry for testing."""
-        with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = Path(f.name)
             registry = DocumentRegistry(db_path)
             yield registry
@@ -198,7 +199,9 @@ class TestIngestionPipelineDeduplication:
             assert doc_id == result["doc_id"]
             assert len(doc_id) == 36  # UUID length
 
-    def test_process_single_document_skips_already_indexed(self, temp_registry, mock_extractor, mock_embedder, sample_files):
+    def test_process_single_document_skips_already_indexed(
+        self, temp_registry, mock_extractor, mock_embedder, sample_files
+    ):
         """Test that already indexed documents are skipped."""
         with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
              patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
@@ -225,7 +228,9 @@ class TestIngestionPipelineDeduplication:
             # Extractor should only be called once
             assert mock_extractor.extract.call_count == 1
 
-    def test_process_single_document_duplicate_not_fully_processed(self, temp_registry, mock_extractor, mock_embedder, sample_files):
+    def test_process_single_document_duplicate_not_fully_processed(
+        self, temp_registry, mock_extractor, mock_embedder, sample_files
+    ):
         """Test processing duplicate when original is not fully processed."""
         with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
              patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):

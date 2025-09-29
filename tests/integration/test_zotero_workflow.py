@@ -1,9 +1,9 @@
 """Integration test for Zotero storage workflow."""
 
 import tempfile
-import shutil
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from rkb.core.document_registry import DocumentRegistry
@@ -38,7 +38,7 @@ class TestZoteroWorkflow:
     @pytest.fixture
     def temp_registry(self):
         """Create temporary registry for testing."""
-        with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = Path(f.name)
             registry = DocumentRegistry(db_path)
             yield registry

@@ -26,7 +26,7 @@ class DocumentIdentity:
             Hexadecimal representation of SHA-256 hash
         """
         sha256_hash = hashlib.sha256()
-        with open(self.source_path, "rb") as f:
+        with self.source_path.open("rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 sha256_hash.update(chunk)
         return sha256_hash.hexdigest()

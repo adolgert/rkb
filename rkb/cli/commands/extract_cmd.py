@@ -1,4 +1,5 @@
 """Extract command - Extract content from PDF documents."""
+# ruff: noqa: T201
 
 import argparse
 from pathlib import Path

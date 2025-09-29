@@ -1,4 +1,5 @@
 """Index command - Create embeddings and index documents for search."""
+# ruff: noqa: T201
 
 import argparse
 from pathlib import Path

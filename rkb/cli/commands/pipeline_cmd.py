@@ -1,4 +1,5 @@
 """Pipeline command - Run complete PDF processing pipeline."""
+# ruff: noqa: T201
 
 import argparse
 import time

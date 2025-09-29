@@ -1,4 +1,5 @@
 """Experiment command - Manage experiments and comparisons."""
+# ruff: noqa: T201
 
 import argparse
 from pathlib import Path
@@ -43,7 +44,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     compare_parser.add_argument("--num-results", type=int, default=5, help="Results per query")
 
     # Show summary
-    summary_parser = subparsers.add_parser("summary", help="Show experiment summary")
+    subparsers.add_parser("summary", help="Show experiment summary")
 
     # Global options
     parser.add_argument(

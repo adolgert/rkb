@@ -1,6 +1,7 @@
 """Experiment service for managing and comparing different configurations."""
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,8 @@ from typing import Any
 from rkb.core.document_registry import DocumentRegistry
 from rkb.core.models import ComparisonResult, ExperimentConfig, SearchResult
 from rkb.services.search_service import SearchService
+
+LOGGER = logging.getLogger('rkb.services.experiment_service')
 
 
 class ExperimentService:
@@ -64,11 +67,11 @@ class ExperimentService:
         # Store experiment configuration
         self.experiments[experiment_config.experiment_id] = experiment_config
 
-        print(f"✓ Created experiment '{experiment_name}' with ID: {experiment_config.experiment_id}")
-        print(f"  Extractor: {extractor}")
-        print(f"  Embedder: {embedder}")
-        print(f"  Chunk size: {chunk_size}")
-        print(f"  Search strategy: {search_strategy}")
+        LOGGER.info(f"Created experiment '{experiment_name}' with ID: {experiment_config.experiment_id}")
+        LOGGER.debug(f"  Extractor: {extractor}")
+        LOGGER.debug(f"  Embedder: {embedder}")
+        LOGGER.debug(f"  Chunk size: {chunk_size}")
+        LOGGER.debug(f"  Search strategy: {search_strategy}")
 
         return experiment_config
 
@@ -122,9 +125,9 @@ class ExperimentService:
         if not experiment:
             raise ValueError(f"Experiment {experiment_id} not found")
 
-        print(f"🧪 Running search experiment: {experiment.experiment_name}")
-        print(f"   Queries: {len(queries)}")
-        print(f"   Configuration: {experiment.embedder} embedder, {experiment.search_strategy} strategy")
+        LOGGER.info(f"Running search experiment: {experiment.experiment_name}")
+        LOGGER.debug(f"   Queries: {len(queries)}")
+        LOGGER.debug(f"   Configuration: {experiment.embedder} embedder, {experiment.search_strategy} strategy")
 
         # Initialize search service with experiment configuration
         search_service = SearchService(
@@ -136,7 +139,7 @@ class ExperimentService:
 
         results = {}
         for query in queries:
-            print(f"  🔍 Searching: {query}")
+            LOGGER.debug(f"  Searching: {query}")
             search_result = search_service.search_documents(
                 query=query,
                 n_results=n_results,
@@ -144,7 +147,7 @@ class ExperimentService:
             )
             results[query] = search_result
 
-        print(f"✓ Completed search experiment with {len(results)} queries")
+        LOGGER.info(f"Completed search experiment with {len(results)} queries")
         return results
 
     def compare_experiments(
@@ -171,7 +174,7 @@ class ExperimentService:
         if not test_queries:
             raise ValueError("Must provide at least one test query")
 
-        print(f"📊 Comparing {len(experiment_ids)} experiments on {len(test_queries)} queries")
+        LOGGER.info(f"Comparing {len(experiment_ids)} experiments on {len(test_queries)} queries")
 
         # Get experiment configurations
         experiments = {}
@@ -180,12 +183,12 @@ class ExperimentService:
             if not exp:
                 raise ValueError(f"Experiment {exp_id} not found")
             experiments[exp_id] = exp
-            print(f"  - {exp.experiment_name}: {exp.embedder} embedder")
+            LOGGER.debug(f"  - {exp.experiment_name}: {exp.embedder} embedder")
 
         # Run experiments
         experiment_results = {}
         for exp_id, experiment in experiments.items():
-            print(f"\n🧪 Running experiment: {experiment.experiment_name}")
+            LOGGER.info(f"Running experiment: {experiment.experiment_name}")
             results = self.run_search_experiment(exp_id, test_queries, n_results)
             experiment_results[exp_id] = results
 
@@ -205,7 +208,7 @@ class ExperimentService:
             metrics=metrics_data,
         )
 
-        print("\n📈 Comparison completed")
+        LOGGER.info("Comparison completed")
         self._display_comparison_summary(comparison_result, experiments)
 
         return comparison_result
@@ -285,27 +288,27 @@ class ExperimentService:
             comparison: ComparisonResult to display
             experiments: Dictionary of experiment configurations
         """
-        print("\n" + "=" * 80)
-        print("EXPERIMENT COMPARISON SUMMARY")
-        print("=" * 80)
+        LOGGER.info("=" * 80)
+        LOGGER.info("EXPERIMENT COMPARISON SUMMARY")
+        LOGGER.info("=" * 80)
 
         # Show experiment details
         for exp_id, exp in experiments.items():
-            print(f"\n{exp.experiment_name} ({exp_id}):")
-            print(f"  Embedder: {exp.embedder}")
-            print(f"  Chunk size: {exp.chunk_size}")
-            print(f"  Strategy: {exp.search_strategy}")
+            LOGGER.info(f"{exp.experiment_name} ({exp_id}):")
+            LOGGER.info(f"  Embedder: {exp.embedder}")
+            LOGGER.info(f"  Chunk size: {exp.chunk_size}")
+            LOGGER.info(f"  Strategy: {exp.search_strategy}")
 
         # Show metrics
-        print("\nMETRICS:")
+        LOGGER.info("METRICS:")
         for metric_name, metric_data in comparison.metrics.items():
-            print(f"\n{metric_name.replace('_', ' ').title()}:")
+            LOGGER.info(f"{metric_name.replace('_', ' ').title()}:")
             sorted_results = sorted(metric_data.items(), key=lambda x: x[1], reverse=True)
             for exp_id, value in sorted_results:
                 exp_name = experiments[exp_id].experiment_name
-                print(f"  {exp_name}: {value:.3f}")
+                LOGGER.info(f"  {exp_name}: {value:.3f}")
 
-        print("\n" + "=" * 80)
+        LOGGER.info("=" * 80)
 
     def save_experiment_results(
         self,
@@ -359,7 +362,7 @@ class ExperimentService:
         with output_path.open("w") as f:
             json.dump(output_data, f, indent=2)
 
-        print(f"✓ Saved experiment results to: {output_path}")
+        LOGGER.info(f"Saved experiment results to: {output_path}")
 
     def get_experiment_summary(self) -> dict[str, Any]:
         """Get summary of all experiments.

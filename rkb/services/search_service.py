@@ -1,5 +1,6 @@
 """Search service for semantic search over document corpus."""
 
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,8 @@ import chromadb
 from rkb.core.document_registry import DocumentRegistry
 from rkb.core.models import ChunkResult, SearchResult
 from rkb.embedders.base import get_embedder
+
+LOGGER = logging.getLogger("rkb.services.search_service")
 
 
 class SearchService:
@@ -319,18 +322,18 @@ class SearchService:
             SearchResult from test query
         """
         msg = f"🧪 Testing search with query: '{test_query}'"
-        print(msg)  # noqa: T201
+        LOGGER.info(msg)
         result = self.search_documents(test_query, n_results=3)
 
         if result.error_message:
             msg = f"✗ Search test failed: {result.error_message}"
-            print(msg)  # noqa: T201
+            LOGGER.error(msg)
         elif result.total_results > 0:
             msg = f"✓ Search test successful - found {result.total_results} results"
-            print(msg)  # noqa: T201
+            LOGGER.info(msg)
         else:
             msg = "⚠ Search test returned no results (may be normal)"
-            print(msg)  # noqa: T201
+            LOGGER.warning(msg)
 
         return result
 

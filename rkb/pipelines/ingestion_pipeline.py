@@ -1,6 +1,7 @@
 """Ingestion pipeline for processing documents through extraction and embedding."""
 
 import json
+import logging
 import time
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +12,8 @@ from rkb.core.models import Document, DocumentStatus
 from rkb.core.text_processing import chunk_text_by_pages, extract_equations
 from rkb.embedders.base import get_embedder
 from rkb.extractors.base import get_extractor
+
+LOGGER = logging.getLogger('rkb.pipelines.ingestion_pipeline')
 
 
 class IngestionPipeline:
@@ -91,7 +94,7 @@ class IngestionPipeline:
                     "content_hash": document.content_hash,
                 }
 
-            print(f"🔄 Processing: {source_path.name} (doc_id: {document.doc_id[:8]}...)")
+            LOGGER.info(f"Processing: {source_path.name} (doc_id: {document.doc_id[:8]}...)")
 
             # Update document status
             self.registry.update_document_status(document.doc_id, DocumentStatus.EXTRACTING)
@@ -124,7 +127,7 @@ class IngestionPipeline:
 
                 # Chunk the text
                 chunks = chunk_text_by_pages(extraction_result.content, max_chunk_size)
-                print(f"  📝 Created {len(chunks)} chunks")
+                LOGGER.debug(f"  Created {len(chunks)} chunks")
 
                 if chunks and not self.skip_embedding:
                     # Generate embeddings only if not skipping
@@ -141,7 +144,7 @@ class IngestionPipeline:
                         self.registry.add_embedding(embedding_result)
 
                         if embedding_result.error_message:
-                            print(f"  ⚠ Embedding errors: {embedding_result.error_message}")
+                            LOGGER.warning(f"  Embedding errors: {embedding_result.error_message}")
 
             # Update document status based on whether embedding was skipped
             if self.skip_embedding:
@@ -152,7 +155,7 @@ class IngestionPipeline:
                 self.registry.update_document_status(document.doc_id, DocumentStatus.INDEXED)
 
             processing_time = time.time() - start_time
-            print(f"  ✓ Completed in {processing_time:.1f}s")
+            LOGGER.info(f"  Completed in {processing_time:.1f}s")
 
             # Calculate chunk information
             chunk_count = len(chunks) if extraction_result.content else 0
@@ -182,7 +185,7 @@ class IngestionPipeline:
                 self.registry.update_document_status(document.doc_id, DocumentStatus.FAILED)
 
             processing_time = time.time() - start_time
-            print(f"  ✗ Error: {e}")
+            LOGGER.error(f"  Error: {e}")
 
             return {
                 "status": "error",
@@ -234,7 +237,7 @@ class IngestionPipeline:
         if max_files:
             file_paths = file_paths[:max_files]
 
-        print(f"📄 Processing {len(file_paths)} documents...")
+        LOGGER.info(f"Processing {len(file_paths)} documents...")
 
         # Process each file
         results = []
@@ -244,7 +247,7 @@ class IngestionPipeline:
         start_time = time.time()
 
         for i, file_path in enumerate(file_paths, 1):
-            print(f"\n[{i}/{len(file_paths)}] {Path(file_path).name}")
+            LOGGER.info(f"[{i}/{len(file_paths)}] {Path(file_path).name}")
 
             result = self.process_single_document(
                 Path(file_path),
@@ -285,17 +288,17 @@ class IngestionPipeline:
         total_time = time.time() - start_time
 
         # Print summary
-        print("\n📊 Processing Summary:")
-        print(f"   Total files: {len(file_paths)}")
-        print(f"   Successful: {success_count}")
-        print(f"   Errors: {error_count}")
-        print(f"   Skipped: {skip_count}")
-        print(f"   Total time: {total_time / 60:.1f} minutes")
+        LOGGER.info("Processing Summary:")
+        LOGGER.info(f"   Total files: {len(file_paths)}")
+        LOGGER.info(f"   Successful: {success_count}")
+        LOGGER.info(f"   Errors: {error_count}")
+        LOGGER.info(f"   Skipped: {skip_count}")
+        LOGGER.info(f"   Total time: {total_time / 60:.1f} minutes")
         if success_count > 0:
-            print(f"   Avg time per file: {total_time / success_count:.1f}s")
+            LOGGER.info(f"   Avg time per file: {total_time / success_count:.1f}s")
 
         if log_file:
-            print(f"\n💾 Results saved to: {log_file}")
+            LOGGER.info(f"Results saved to: {log_file}")
 
         return results
 
@@ -346,10 +349,10 @@ class IngestionPipeline:
         failed_docs = self.registry.get_documents_by_status(DocumentStatus.FAILED)
 
         if not failed_docs:
-            print("No failed documents to retry")
+            LOGGER.info("No failed documents to retry")
             return []
 
-        print(f"🔄 Retrying {len(failed_docs)} failed documents...")
+        LOGGER.info(f"Retrying {len(failed_docs)} failed documents...")
 
         results = []
         for doc in failed_docs:

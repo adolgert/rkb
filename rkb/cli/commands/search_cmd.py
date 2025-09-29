@@ -1,4 +1,5 @@
 """Search command - Perform semantic search over indexed documents."""
+# ruff: noqa: T201
 
 import argparse
 from pathlib import Path

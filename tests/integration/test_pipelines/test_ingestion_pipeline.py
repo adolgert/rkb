@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from rkb.core.document_registry import DocumentRegistry
-from rkb.core.models import Document, DocumentStatus, EmbeddingResult, ExtractionResult
+from rkb.core.models import DocumentStatus, EmbeddingResult, ExtractionResult
 from rkb.pipelines.ingestion_pipeline import IngestionPipeline
 
 

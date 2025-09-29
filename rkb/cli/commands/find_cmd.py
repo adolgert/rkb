@@ -1,4 +1,5 @@
 """Find command - Find recent PDF files."""
+# ruff: noqa: T201
 
 import argparse
 from pathlib import Path

@@ -1,11 +1,14 @@
 """Document registry for tracking processed documents with SQLite backend."""
 
+import logging
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from rkb.core.models import Document, DocumentStatus, EmbeddingResult, ExtractionResult
+
+LOGGER = logging.getLogger("rkb.core.document_registry")
 
 
 class DocumentRegistry:
@@ -116,7 +119,7 @@ class DocumentRegistry:
                 return True
         except sqlite3.IntegrityError as e:
             # Handle case where doc_id already exists (should be rare with UUIDs)
-            print(f"Document ID collision: {e}")
+            LOGGER.exception("Document ID collision")
             return False
 
     def get_document(self, doc_id: str) -> Document | None:
@@ -426,7 +429,7 @@ class DocumentRegistry:
             For now, just updates the existing document's source_path if needed.
             In future, could maintain multiple source references.
         """
-        print(f"📋 Linking duplicate: {new_source_path} -> {existing_doc.doc_id}")
+        LOGGER.info(f"📋 Linking duplicate: {new_source_path} -> {existing_doc.doc_id}")
         return existing_doc
 
     def process_new_document(

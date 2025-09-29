@@ -2,11 +2,12 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
 import pytest
 
-from rkb.extractors.nougat_extractor import NougatExtractor
 from rkb.core.models import ExtractionStatus
+from rkb.extractors.nougat_extractor import NougatExtractor
 
 
 class TestNougatExtractorIdentity:
@@ -22,7 +23,7 @@ class TestNougatExtractorIdentity:
     @pytest.fixture
     def sample_pdf(self):
         """Create a sample PDF file."""
-        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             f.write(b"Mock PDF content")
             f.flush()
             pdf_path = Path(f.name)
@@ -33,7 +34,7 @@ class TestNougatExtractorIdentity:
         """Test extraction with provided doc_id."""
         doc_id = "test-doc-id-123"
 
-        with patch.object(temp_extractor, '_extract_pdf_chunks') as mock_extract:
+        with patch.object(temp_extractor, "_extract_pdf_chunks") as mock_extract:
             mock_extract.return_value = {
                 "content": "Extracted content",
                 "successful_chunks": [(1, 3)],
@@ -50,7 +51,7 @@ class TestNougatExtractorIdentity:
 
     def test_extract_generates_doc_id_when_not_provided(self, temp_extractor, sample_pdf):
         """Test that doc_id is generated when not provided."""
-        with patch.object(temp_extractor, '_extract_pdf_chunks') as mock_extract:
+        with patch.object(temp_extractor, "_extract_pdf_chunks") as mock_extract:
             mock_extract.return_value = {
                 "content": "Extracted content",
                 "successful_chunks": [(1, 3)],
@@ -68,7 +69,7 @@ class TestNougatExtractorIdentity:
         """Test that extraction creates proper directory structure."""
         doc_id = "test-doc-id-456"
 
-        with patch.object(temp_extractor, '_extract_pdf_chunks') as mock_extract:
+        with patch.object(temp_extractor, "_extract_pdf_chunks") as mock_extract:
             mock_extract.return_value = {
                 "content": "Extracted content",
                 "successful_chunks": [(1, 3)],
@@ -103,7 +104,7 @@ class TestNougatExtractorIdentity:
         """Test extraction when no content is extracted."""
         doc_id = "test-doc-id-empty"
 
-        with patch.object(temp_extractor, '_extract_pdf_chunks') as mock_extract:
+        with patch.object(temp_extractor, "_extract_pdf_chunks") as mock_extract:
             mock_extract.return_value = {
                 "content": "",
                 "successful_chunks": [],
@@ -121,7 +122,7 @@ class TestNougatExtractorIdentity:
         """Test exception handling during extraction."""
         doc_id = "test-doc-id-error"
 
-        with patch.object(temp_extractor, '_extract_pdf_chunks') as mock_extract:
+        with patch.object(temp_extractor, "_extract_pdf_chunks") as mock_extract:
             mock_extract.side_effect = Exception("Extraction failed")
 
             result = temp_extractor.extract(sample_pdf, doc_id=doc_id)
@@ -134,7 +135,7 @@ class TestNougatExtractorIdentity:
         """Test that extraction_id includes doc_id."""
         doc_id = "test-doc-id-789"
 
-        with patch.object(temp_extractor, '_extract_pdf_chunks') as mock_extract:
+        with patch.object(temp_extractor, "_extract_pdf_chunks") as mock_extract:
             mock_extract.return_value = {
                 "content": "Extracted content",
                 "successful_chunks": [(1, 3)],
@@ -151,7 +152,7 @@ class TestNougatExtractorIdentity:
         """Test that extraction path follows PathResolver pattern."""
         doc_id = "test-doc-id-pathresolver"
 
-        with patch.object(temp_extractor, '_extract_pdf_chunks') as mock_extract:
+        with patch.object(temp_extractor, "_extract_pdf_chunks") as mock_extract:
             mock_extract.return_value = {
                 "content": "Extracted content",
                 "successful_chunks": [(1, 3)],
