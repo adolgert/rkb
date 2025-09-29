@@ -1,6 +1,6 @@
 # RKB CLI Quick Tutorial
 
-This tutorial shows how to use the RKB command-line interface for PDF processing and semantic search.
+This tutorial shows how to use the RKB command-line interface for PDF processing and semantic search with automatic duplicate detection and content-based deduplication.
 
 ## Prerequisites
 
@@ -38,6 +38,8 @@ Extract text and structure from your PDFs:
 rkb extract data/initial/your_file.pdf --max-pages 5 --force-reprocess
 ```
 
+**New behavior**: The system automatically detects duplicate content using SHA-256 hashes. If you try to extract the same PDF again, it will show "duplicate" status unless you use `--force-reprocess`.
+
 **Currently errors**: The extraction completes successfully but the CLI reports it as failed due to embedding errors. The underlying PDF→MMD conversion works correctly.
 
 ### Step 4: Complete Pipeline (Extract + Index)
@@ -47,6 +49,8 @@ Run the full pipeline to extract and create embeddings:
 ```bash
 rkb pipeline --data-dir data/initial --num-files 3 --project-name "Test Project" --extractor nougat --embedder chroma --max-pages 5
 ```
+
+**New behavior**: The pipeline now handles duplicate filenames automatically. Multiple files named "Document.pdf" from different sources (like Zotero storage folders) are processed without conflicts. Identical content is automatically detected and linked.
 
 **Currently errors**: The pipeline fails during the embedding step with array comparison issues in ChromaDB. The extraction portion works correctly.
 
@@ -91,7 +95,7 @@ rkb project show project_1759080878
 
 ### Direct Python API (Works Perfectly)
 
-While the CLI has embedding issues, the core extraction works perfectly via Python:
+While the CLI has embedding issues, the core extraction works perfectly via Python. The new deduplication system also works transparently:
 
 ```python
 from rkb.extractors.nougat_extractor import NougatExtractor
@@ -122,11 +126,17 @@ pipeline = IngestionPipeline(
     embedder_name='chroma'
 )
 
-result = pipeline.process_single_document(
-    Path("data/initial/your_file.pdf"),
-    force_reprocess=True
+# First time processing
+result1 = pipeline.process_single_document(
+    Path("data/initial/your_file.pdf")
 )
-print(result)  # Shows successful extraction
+print(result1)  # Shows successful extraction
+
+# Second time - will detect duplicate
+result2 = pipeline.process_single_document(
+    Path("data/initial/copy_of_your_file.pdf")  # Same content, different name
+)
+print(result2)  # Shows "duplicate" status if same content
 ```
 
 ## Current Status Summary
@@ -136,6 +146,9 @@ print(result)  # Shows successful extraction
 - Project management (`rkb project`)
 - Core PDF→MMD extraction (Python API)
 - Text chunking and equation detection
+- **NEW**: Automatic duplicate detection and content-based deduplication
+- **NEW**: Handling of duplicate filenames (e.g., multiple "Document.pdf")
+- **NEW**: UUID-based storage paths for extracted content
 
 ❌ **Currently errors**:
 - CLI extraction commands (report failures despite successful extraction)
@@ -149,11 +162,102 @@ print(result)  # Shows successful extraction
 2. **CLI Error Reporting**: CLI marks successful extractions as failed due to embedding issues
 3. **Exception Handling**: Fixed collection name mismatch but numpy array issues remain
 
+## Storage Structure (Updated)
+
+The system now uses UUID-based storage for better duplicate handling:
+
+```
+rkb_extractions/
+├── documents/
+│   ├── {doc_id_uuid_1}/
+│   │   ├── extracted.mmd
+│   │   └── metadata.json
+│   └── {doc_id_uuid_2}/
+│       ├── extracted.mmd
+│       └── metadata.json
+```
+
+**Key changes**:
+- Each document gets a unique UUID-based directory
+- Content is stored by `doc_id` rather than filename
+- Multiple source paths can reference the same content
+- Eliminates filename collision issues
+
 ## Expected Processing Times
 
 - **PDF Extraction**: ~2-3 minutes per PDF (depending on length and pages)
 - **Small PDF (6 pages)**: ~107 seconds
 - **Embedding Generation**: Currently failing, but should be ~30-60 seconds per document
+
+## Testing Duplicate Detection
+
+### Test 1: Duplicate Filenames (Different Content)
+
+```bash
+# Create test structure with same filenames, different content
+mkdir -p test_data/zotero1 test_data/zotero2
+
+# Simulate Zotero storage structure
+echo "Content of paper 1" > test_data/zotero1/Document.pdf
+echo "Content of paper 2" > test_data/zotero2/Document.pdf
+
+# Process both - should succeed without conflicts
+rkb extract test_data/zotero1/Document.pdf test_data/zotero2/Document.pdf
+
+# Expected: Both files processed successfully, different doc_ids assigned
+```
+
+### Test 2: Identical Content (Different Names/Paths)
+
+```bash
+# Create identical content with different names
+cp test_data/zotero1/Document.pdf test_data/duplicate_paper.pdf
+cp test_data/zotero1/Document.pdf test_data/another_copy.pdf
+
+# Process all three
+rkb extract test_data/zotero1/Document.pdf test_data/duplicate_paper.pdf test_data/another_copy.pdf
+
+# Expected: First file processes normally, others show "duplicate" status
+```
+
+### Test 3: Force Reprocessing Duplicates
+
+```bash
+# Force reprocess a duplicate
+rkb extract test_data/duplicate_paper.pdf --force-reprocess
+
+# Expected: File is reprocessed despite being a duplicate
+```
+
+### Test 4: Zotero Storage Simulation
+
+```bash
+# Simulate real Zotero storage structure
+mkdir -p test_zotero/Zotero/storage/{ABC123,XYZ789,DEF456}
+
+# Create realistic Zotero scenario
+cp sample1.pdf test_zotero/Zotero/storage/ABC123/Document.pdf
+cp sample2.pdf test_zotero/Zotero/storage/XYZ789/Document.pdf
+cp sample1.pdf test_zotero/Zotero/storage/DEF456/Paper.pdf  # Duplicate content
+
+# Process the entire directory
+rkb pipeline --data-dir test_zotero/Zotero/storage --num-files 10
+
+# Expected:
+# - ABC123/Document.pdf: processed successfully
+# - XYZ789/Document.pdf: processed successfully (different content)
+# - DEF456/Paper.pdf: marked as duplicate of ABC123 version
+```
+
+### Test 5: Verify Storage Structure
+
+```bash
+# After running tests, check the storage structure
+ls -la rkb_extractions/documents/
+
+# Expected: UUID-based directories, not filename-based
+# Each doc_id directory contains extracted.mmd
+```
 
 ## Help Commands
 
