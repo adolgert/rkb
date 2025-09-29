@@ -22,6 +22,7 @@ class TestIngestionPipelineDeduplication:
             registry = DocumentRegistry(db_path)
             yield registry
             # Cleanup
+            registry.close()
             db_path.unlink()
 
     @pytest.fixture

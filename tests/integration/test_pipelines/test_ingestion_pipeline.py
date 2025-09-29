@@ -24,6 +24,7 @@ class TestIngestionPipeline:
         yield registry
 
         # Cleanup
+        registry.close()
         if db_path.exists():
             db_path.unlink()
 

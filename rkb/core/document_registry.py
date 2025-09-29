@@ -23,6 +23,25 @@ class DocumentRegistry:
         self.db_path = Path(db_path)
         self._init_database()
 
+    def close(self) -> None:
+        """Close any open database connections.
+
+        Note: This class uses context managers for all database operations,
+        so connections should be automatically closed. This method is provided
+        for explicit cleanup in test scenarios.
+        """
+        # Since we use context managers for all DB operations,
+        # there's no persistent connection to close.
+        pass
+
+    def __enter__(self):
+        """Enter context manager."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager."""
+        self.close()
+
     def _init_database(self) -> None:
         """Initialize the SQLite database with required tables."""
         with sqlite3.connect(self.db_path) as conn:

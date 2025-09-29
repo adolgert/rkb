@@ -44,6 +44,11 @@ class SearchService:
         self._chroma_client = None
         self._collection = None
 
+    def close(self) -> None:
+        """Close any open connections and clear cached objects."""
+        self._chroma_client = None
+        self._collection = None
+
     def _get_collection(self):
         """Get or create Chroma collection."""
         if self._chroma_client is None:
