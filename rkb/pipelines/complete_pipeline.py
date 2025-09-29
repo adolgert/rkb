@@ -87,7 +87,7 @@ class CompletePipeline:
                         stat.st_mtime, tz=timezone.utc
                     ).strftime("%Y-%m-%d %H:%M:%S"),
                 })
-            except Exception as e:
+            except Exception:
                 LOGGER.warning(f"Error reading {pdf_file}: {e}")
                 continue
 
@@ -365,26 +365,26 @@ class CompletePipeline:
         # Check extractor
         try:
             extractor = self.ingestion_pipeline.extractor
-            capabilities = extractor.get_capabilities()
+            extractor.get_capabilities()  # Test that extractor is functional
             LOGGER.info(f"✓ Extractor '{extractor.name}' is available")
-        except Exception as e:
+        except Exception:
             LOGGER.exception("✗ Extractor check failed")
             return False
 
         # Check embedder
         try:
             embedder = self.ingestion_pipeline.embedder
-            capabilities = embedder.get_capabilities()
+            embedder.get_capabilities()  # Test that embedder is functional
             LOGGER.info(f"✓ Embedder '{embedder.name}' is available")
-        except Exception as e:
+        except Exception:
             LOGGER.exception("✗ Embedder check failed")
             return False
 
         # Test database connectivity
         try:
-            stats = self.registry.get_processing_stats()
+            self.registry.get_processing_stats()  # Test that registry is functional
             LOGGER.info("✓ Document registry is functional")
-        except Exception as e:
+        except Exception:
             LOGGER.exception("✗ Document registry check failed")
             return False
 

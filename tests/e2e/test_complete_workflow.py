@@ -240,7 +240,6 @@ class TestCompleteWorkflow:
         db_path = temp_workspace / "db" / "persistence_test.db"
 
         # Create data with first registry instance
-        project_id = None
         # Create a nested scope to test persistence
         def create_initial_data():
             registry1 = DocumentRegistry(db_path)
@@ -250,7 +249,7 @@ class TestCompleteWorkflow:
                 description="Testing data persistence"
             )
 
-        project_id = create_initial_data()  # registry1 goes out of scope
+        create_initial_data()  # registry1 goes out of scope
 
         # Verify data persists with new registry instance
         registry2 = DocumentRegistry(db_path)
@@ -258,7 +257,7 @@ class TestCompleteWorkflow:
 
         # The project should exist (though list might be empty if no documents)
         # This tests that the database schema and basic operations work
-        projects = project_service2.list_projects()
+        project_service2.list_projects()  # Verify the service works
         # Note: projects might be empty if no documents were added
 
         # Test database file exists and is not corrupt

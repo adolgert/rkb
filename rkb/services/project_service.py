@@ -43,13 +43,6 @@ class ProjectService:
 
         # For now, projects are just logical groupings in the registry
         # Future versions could have a dedicated projects table
-        project_metadata = {
-            "project_id": project_id,
-            "project_name": project_name,
-            "description": description,
-            "data_dir": str(data_dir) if data_dir else None,
-            "created_date": datetime.now().isoformat(),
-        }
 
         LOGGER.info(f"Created project '{project_name}' with ID: {project_id}")
         if description:
@@ -66,7 +59,7 @@ class ProjectService:
             Dictionary mapping project IDs to ProjectStats
         """
         # Get all documents and group by project_id
-        all_stats = self.registry.get_processing_stats()
+        self.registry.get_processing_stats()  # Ensure registry is accessible
 
         # For now, we'll identify projects by looking at project_id attributes
         # This is a simplified approach - future versions could have a projects table
@@ -295,14 +288,7 @@ class ProjectService:
         LOGGER.info(f"Found {len(filtered_docs)} documents matching criteria")
 
         # Could save subset definition for future use
-        subset_info = {
-            "subset_name": subset_name,
-            "criteria": criteria,
-            "project_id": project_id,
-            "created_date": datetime.now().isoformat(),
-            "document_count": len(filtered_docs),
-            "document_ids": [doc.doc_id for doc in filtered_docs],
-        }
+        # subset_info would contain: subset_name, criteria, project_id, created_date, document_count, document_ids
 
         return filtered_docs
 
