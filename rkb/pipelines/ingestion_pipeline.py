@@ -185,7 +185,7 @@ class IngestionPipeline:
                 self.registry.update_document_status(document.doc_id, DocumentStatus.FAILED)
 
             processing_time = time.time() - start_time
-            LOGGER.error(f"  Error: {e}")
+            LOGGER.exception("  Error")
 
             return {
                 "status": "error",

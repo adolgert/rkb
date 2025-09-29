@@ -196,7 +196,7 @@ class CompletePipeline:
                     "success": False,
                     "error": str(e),
                 }
-                LOGGER.error(f"Error finding PDFs: {e}")
+                LOGGER.exception("Error finding PDFs")
                 return pipeline_results
 
             # Step 2: Process documents through ingestion pipeline
@@ -236,7 +236,7 @@ class CompletePipeline:
                     "success": False,
                     "error": str(e),
                 }
-                LOGGER.error(f"Error during document processing: {e}")
+                LOGGER.exception("Error during document processing")
                 return pipeline_results
 
             # Step 3: Get processing statistics
@@ -335,7 +335,7 @@ class CompletePipeline:
                 "failed_embeddings": 0,
             })
 
-            LOGGER.error(f"Pipeline failed after {duration:.1f} seconds: {e}")
+            LOGGER.exception(f"Pipeline failed after {duration:.1f} seconds")
             return pipeline_results
 
     def validate_prerequisites(self, data_dir: str | Path = "data/initial") -> bool:
@@ -368,7 +368,7 @@ class CompletePipeline:
             capabilities = extractor.get_capabilities()
             LOGGER.info(f"✓ Extractor '{extractor.name}' is available")
         except Exception as e:
-            LOGGER.error(f"✗ Extractor check failed: {e}")
+            LOGGER.exception("✗ Extractor check failed")
             return False
 
         # Check embedder
@@ -377,7 +377,7 @@ class CompletePipeline:
             capabilities = embedder.get_capabilities()
             LOGGER.info(f"✓ Embedder '{embedder.name}' is available")
         except Exception as e:
-            LOGGER.error(f"✗ Embedder check failed: {e}")
+            LOGGER.exception("✗ Embedder check failed")
             return False
 
         # Test database connectivity
@@ -385,7 +385,7 @@ class CompletePipeline:
             stats = self.registry.get_processing_stats()
             LOGGER.info("✓ Document registry is functional")
         except Exception as e:
-            LOGGER.error(f"✗ Document registry check failed: {e}")
+            LOGGER.exception("✗ Document registry check failed")
             return False
 
         return True
