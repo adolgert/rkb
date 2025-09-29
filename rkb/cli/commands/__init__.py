@@ -2,21 +2,21 @@
 
 # Import all command modules for easy access
 from . import (
-    pipeline_cmd,
-    search_cmd,
-    index_cmd,
-    find_cmd,
-    extract_cmd,
-    project_cmd,
     experiment_cmd,
+    extract_cmd,
+    find_cmd,
+    index_cmd,
+    pipeline_cmd,
+    project_cmd,
+    search_cmd,
 )
 
 __all__ = [
-    "pipeline_cmd",
-    "search_cmd",
-    "index_cmd",
-    "find_cmd",
-    "extract_cmd",
-    "project_cmd",
     "experiment_cmd",
+    "extract_cmd",
+    "find_cmd",
+    "index_cmd",
+    "pipeline_cmd",
+    "project_cmd",
+    "search_cmd",
 ]

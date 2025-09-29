@@ -20,8 +20,8 @@ class TestSearchService:
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = Path(f.name)
 
-        registry = DocumentRegistry(db_path)
-        yield registry
+        with DocumentRegistry(db_path) as registry:
+            yield registry
 
         # Cleanup
         if db_path.exists():
@@ -47,6 +47,22 @@ class TestSearchService:
             "ids": [["chunk_1", "chunk_2", "chunk_3", "chunk_4"]],
         }
         return collection
+
+    @pytest.fixture
+    def search_service(self, temp_db):
+        """Create search service and ensure cleanup."""
+        services = []
+
+        def _create_service(**kwargs):
+            service = SearchService(registry=temp_db, **kwargs)
+            services.append(service)
+            return service
+
+        yield _create_service
+
+        # Cleanup all created services
+        for service in services:
+            service.close()
 
     @pytest.fixture
     def mock_embedder(self):
@@ -235,7 +251,10 @@ class TestSearchService:
             }
 
             service = SearchService(registry=temp_db)
-            stats = service.get_database_stats()
+            try:
+                stats = service.get_database_stats()
+            finally:
+                service.close()
 
             assert stats["total_chunks"] == 100
             assert stats["equation_percentage"] == 50.0  # 2 out of 4 samples

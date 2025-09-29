@@ -1,7 +1,7 @@
 """Project command - Manage document projects."""
+# ruff: noqa: T201
 
 import argparse
-import json
 from pathlib import Path
 
 from rkb.core.document_registry import DocumentRegistry
@@ -23,7 +23,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     create_parser.add_argument("--data-dir", type=Path, help="Project data directory")
 
     # List projects
-    list_parser = subparsers.add_parser("list", help="List all projects")
+    subparsers.add_parser("list", help="List all projects")
 
     # Show project details
     show_parser = subparsers.add_parser("show", help="Show project details")
@@ -32,7 +32,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     # Find recent PDFs
     find_parser = subparsers.add_parser("find-pdfs", help="Find recent PDFs")
     find_parser.add_argument("--data-dir", type=Path, required=True, help="Directory to search")
-    find_parser.add_argument("--num-files", type=int, default=50, help="Number of files (default: 50)")
+    find_parser.add_argument(
+        "--num-files", type=int, default=50, help="Number of files (default: 50)"
+    )
     find_parser.add_argument("--output-file", type=Path, help="Save file list to JSON")
     find_parser.add_argument("--project-id", help="Associate with project")
 
@@ -40,7 +42,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     subset_parser = subparsers.add_parser("subset", help="Create document subset")
     subset_parser.add_argument("name", help="Subset name")
     subset_parser.add_argument("--project-id", help="Project to filter by")
-    subset_parser.add_argument("--status", choices=["pending", "extracting", "extracted", "indexing", "indexed", "failed"], help="Filter by status")
+    subset_parser.add_argument(
+        "--status",
+        choices=["pending", "extracting", "extracted", "indexing", "indexed", "failed"],
+        help="Filter by status"
+    )
     subset_parser.add_argument("--date-from", help="Filter by date (YYYY-MM-DD)")
     subset_parser.add_argument("--date-to", help="Filter by date (YYYY-MM-DD)")
     subset_parser.add_argument("--filename-pattern", help="Filter by filename pattern")
@@ -50,7 +56,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     export_parser = subparsers.add_parser("export", help="Export project data")
     export_parser.add_argument("project_id", help="Project ID")
     export_parser.add_argument("--output-file", type=Path, required=True, help="Output JSON file")
-    export_parser.add_argument("--include-content", action="store_true", help="Include extracted content")
+    export_parser.add_argument(
+        "--include-content", action="store_true", help="Include extracted content"
+    )
 
     # Global options
     parser.add_argument(
@@ -74,19 +82,18 @@ def execute(args: argparse.Namespace) -> int:
 
         if args.action == "create":
             return _create_project(project_service, args)
-        elif args.action == "list":
+        if args.action == "list":
             return _list_projects(project_service, args)
-        elif args.action == "show":
+        if args.action == "show":
             return _show_project(project_service, args)
-        elif args.action == "find-pdfs":
+        if args.action == "find-pdfs":
             return _find_pdfs(project_service, args)
-        elif args.action == "subset":
+        if args.action == "subset":
             return _create_subset(project_service, args)
-        elif args.action == "export":
+        if args.action == "export":
             return _export_project(project_service, args)
-        else:
-            print(f"Unknown action: {args.action}")
-            return 1
+        print(f"Unknown action: {args.action}")
+        return 1
 
     except Exception as e:
         print(f"✗ Project command failed: {e}")
@@ -107,7 +114,7 @@ def _create_project(service: ProjectService, args: argparse.Namespace) -> int:
     return 0
 
 
-def _list_projects(service: ProjectService, args: argparse.Namespace) -> int:
+def _list_projects(service: ProjectService, _args: argparse.Namespace) -> int:
     """List all projects."""
     projects = service.list_projects()
 

@@ -18,15 +18,16 @@ Current Data Architecture Analysis
     - Raw PDF files
     - No versioning or deduplication
     - Metadata: filename, size, modification time
-  2. Extraction Layer (nugget/extracted/, nugget/robust_extracted/)
-    - Markdown files (.mmd) from Nougat OCR
-    - 1:1 mapping with source PDFs
-    - Two directories for different extraction strategies
-    - No content hashing or duplicate detection
-  3. Index Layer (nugget/chroma_db/)
+  2. Extraction Layer (extractions/documents/{doc_id}/)  # ✅ UPDATED
+    - UUID-based directory structure for organization
+    - extracted.mmd files from Nougat OCR
+    - metadata.json for document metadata
+    - ✅ Content hashing and duplicate detection implemented
+    - ✅ PathResolver for consistent path management
+  3. Index Layer (rkb_chroma_db/)
     - Vector embeddings in Chroma
     - SQLite metadata + binary vector storage
-    - Chunk-level granularity with limited traceability
+    - ✅ Enhanced chunk-level granularity with doc_id traceability
 
   Metadata Structures
 
@@ -49,40 +50,58 @@ Current Data Architecture Analysis
 
   Chunk Metadata (in Chroma):
   {
-    "source_file": "markdown.mmd",
-    "pdf_name": "pdf_basename",
-    "doc_id": "document_uuid",  # MISSING - critical for document lineage
+    "source_file": "extracted.mmd",  # UUID-based path
+    "pdf_name": "original_filename.pdf",
+    "doc_id": "document_uuid",  # ✅ IMPLEMENTED - proper document lineage
     "chunk_index": 0,
     "chunk_length": 1500,
     "has_equations": true,
     "display_eq_count": 2,
     "inline_eq_count": 5,
-    "processed_date": "ISO timestamp"
+    "processed_date": "ISO timestamp",
+    "content_hash": "sha256_hash",  # ✅ IMPLEMENTED - content deduplication
+    "source_type": "zotero",  # ✅ IMPLEMENTED - source detection
+    "zotero_id": "ABC123"  # ✅ IMPLEMENTED - Zotero reference
   }
 
-  Critical Architecture Gaps
+  Architecture Improvements (2025-09-29)
 
-  1. No Content-Based Identification
-    - Files tracked by name/path only
-    - No MD5/SHA hashes for deduplication
-    - Duplicate files create duplicate chunks
-  2. Weak Document Traceability
-    - Chunks link to .mmd files, not original PDFs
-    - Missing doc_id linkage in chunk metadata
-    - No page number preservation
-    - Lost hierarchical structure (chapters/sections)
-  3. No Version Management
-    - Cannot replace/update documents
-    - No deletion cascade (PDF→MMD→chunks)
-    - Manual cleanup required for updates
-  4. Limited Metadata
-    - No paper metadata (title, authors, DOI, ArXiv ID)
-    - No extraction quality metrics
-    - No inter-document relationships
-  5. Fragmented State
-    - Multiple JSON logs without central registry
-    - Two extraction directories without clear reconciliation
-    - No transaction/rollback capability
+  ✅ Content-Based Identification (IMPLEMENTED)
+    - SHA-256 content hashing for deduplication
+    - DocumentIdentity class for centralized identity management
+    - Automatic duplicate detection and linking
+    - Support for multiple source paths referencing same content
+
+  ✅ Enhanced Document Traceability (IMPLEMENTED)
+    - UUID-based document storage (doc_id)
+    - PathResolver for consistent extraction organization
+    - Direct linkage from chunks to original documents
+    - Proper document lineage preservation
+
+  ✅ Zotero Storage Support (IMPLEMENTED)
+    - Read-only access to ~/Zotero/storage structure
+    - Handles 6000+ files with duplicate filenames
+    - Source type detection (zotero/dropbox/local)
+    - Zotero ID extraction for traceability
+
+  ✅ Database Schema Updates (IMPLEMENTED)
+    - Removed UNIQUE constraint on source_path
+    - Enhanced DocumentRegistry with content hash methods
+    - Support for multiple source references per document
+    - Proper deduplication logic in process_new_document()
+
+  Remaining Gaps
+  1. Limited Metadata Enhancement
+    - Paper metadata extraction (title, authors, DOI, ArXiv ID)
+    - Extraction quality metrics
+    - Inter-document relationships
+  2. Advanced Version Management
+    - Document replacement workflows
+    - Deletion cascade operations
+    - Transaction/rollback capability
+  3. Multiple Source References
+    - Track all source paths that reference same document
+    - Source synchronization monitoring
 
 ● How Architecture Would Handle Updates
 
@@ -146,3 +165,119 @@ Current Data Architecture Analysis
   - Clean updates/deletions
   - Document-level search results
   - Provenance tracking from search result to source PDF
+
+## ✅ Implemented Components (2025-09-29)
+
+### Core Infrastructure
+
+#### DocumentIdentity (rkb/core/identity.py)
+- Manages document identity, content hashing, and storage paths
+- SHA-256 content hash calculation for deduplication
+- Source type detection (zotero/dropbox/local)
+- Zotero ID extraction from storage paths
+- UUID generation for consistent document IDs
+
+#### PathResolver (rkb/core/paths.py)
+- Centralized path generation for all RKB storage
+- UUID-based directory structure: `extractions/documents/{doc_id}/`
+- Consistent naming: `extracted.mmd`, `metadata.json`
+- Directory creation and management utilities
+
+### Database Enhancements
+
+#### DocumentRegistry Updates
+- **Enhanced Methods:**
+  - `find_by_content_hash()` - Locate documents by SHA-256 hash
+  - `process_new_document()` - Content-based deduplication workflow
+  - `add_document_reference()` - Link multiple sources to same content
+  - `update_document_content_hash()` - Content hash management
+  - `get_all_documents()` - Complete document retrieval
+
+- **Schema Changes:**
+  - Removed UNIQUE constraint on `source_path`
+  - Proper `project_id` handling in all methods
+  - Enhanced error handling for UUID collisions
+
+### Pipeline Integration
+
+#### NougatExtractor Updates
+- Accepts optional `doc_id` parameter for consistent naming
+- Uses PathResolver for UUID-based extraction paths
+- Creates `extractions/documents/{doc_id}/extracted.mmd` structure
+- Maintains backward compatibility with existing interface
+
+#### IngestionPipeline Updates
+- Uses `process_new_document()` for automatic deduplication
+- Status-aware processing (checks INDEXED before duplicate detection)
+- Passes doc_id to extractor for consistent file organization
+- Enhanced logging with doc_id information
+
+### Testing Coverage
+
+#### Unit Tests (29 tests)
+- DocumentIdentity: Content hashing, source detection, path generation
+- PathResolver: Directory management, path consistency
+- DocumentRegistry: Deduplication logic, content hash operations
+- NougatExtractor: doc_id integration, path structure
+- IngestionPipeline: Duplicate handling, status management
+
+#### Integration Tests (7 tests)
+- Zotero workflow simulation with realistic directory structure
+- Duplicate filename handling across different sources
+- Content deduplication with identical files
+- Read-only source preservation verification
+- End-to-end pipeline testing with mocked components
+
+### Zotero Support Features
+
+#### Source Detection
+```python
+identity = DocumentIdentity(Path("/home/user/Zotero/storage/ABC123/Document.pdf"))
+assert identity.source_type == "zotero"
+assert identity.zotero_id == "ABC123"
+```
+
+#### Duplicate Filename Handling
+- Multiple `Document.pdf` files from different Zotero entries
+- Content-based deduplication prevents duplicate processing
+- Maintains traceability to original source locations
+- Read-only access ensures source directory integrity
+
+#### Performance Characteristics
+- Supports 6000+ files in Zotero storage
+- SHA-256 hashing for reliable content identification
+- UUID-based organization prevents filename conflicts
+- Efficient database indexing on content_hash and doc_id
+
+### Usage Examples
+
+#### Processing Zotero Storage
+```python
+from rkb.pipelines.ingestion_pipeline import IngestionPipeline
+
+pipeline = IngestionPipeline(project_id="research_papers")
+
+# Process entire Zotero storage
+zotero_files = Path("~/Zotero/storage").rglob("*.pdf")
+for pdf_file in zotero_files:
+    result = pipeline.process_single_document(pdf_file)
+    print(f"Status: {result['status']}, doc_id: {result['doc_id']}")
+```
+
+#### Manual Document Processing
+```python
+from rkb.core.document_registry import DocumentRegistry
+
+registry = DocumentRegistry("rkb_documents.db")
+
+# Process with automatic deduplication
+doc, is_new = registry.process_new_document(
+    Path("/path/to/paper.pdf"),
+    project_id="my_project"
+)
+
+if is_new:
+    print(f"New document: {doc.doc_id}")
+else:
+    print(f"Duplicate detected: {doc.content_hash}")
+```

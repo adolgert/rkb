@@ -2,7 +2,6 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch
 
 import pytest
 
@@ -24,6 +23,7 @@ class TestProjectService:
         yield registry
 
         # Cleanup
+        registry.close()
         if db_path.exists():
             db_path.unlink()
 
@@ -123,7 +123,7 @@ class TestProjectService:
 
             # Verify content
             import json
-            with open(output_file) as f:
+            with output_file.open() as f:
                 saved_files = json.load(f)
 
             assert len(saved_files) == 3
@@ -267,7 +267,7 @@ class TestProjectService:
 
             # Verify content
             import json
-            with open(output_file) as f:
+            with output_file.open() as f:
                 data = json.load(f)
 
             assert data["project_id"] == "test_project"

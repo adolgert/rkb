@@ -1,12 +1,15 @@
 """Project service for managing document collections and experiments."""
 
+import datetime
 import json
-from datetime import datetime
+import logging
 from pathlib import Path
 from typing import Any
 
 from rkb.core.document_registry import DocumentRegistry
 from rkb.core.models import Document, DocumentStatus, ProjectStats
+
+LOGGER = logging.getLogger("rkb.services.project_service")
 
 
 class ProjectService:
@@ -36,23 +39,16 @@ class ProjectService:
         Returns:
             Project ID
         """
-        project_id = f"project_{int(datetime.now().timestamp())}"
+        project_id = f"project_{int(datetime.datetime.now().timestamp())}"
 
         # For now, projects are just logical groupings in the registry
         # Future versions could have a dedicated projects table
-        project_metadata = {
-            "project_id": project_id,
-            "project_name": project_name,
-            "description": description,
-            "data_dir": str(data_dir) if data_dir else None,
-            "created_date": datetime.now().isoformat(),
-        }
 
-        print(f"✓ Created project '{project_name}' with ID: {project_id}")
+        LOGGER.info(f"Created project '{project_name}' with ID: {project_id}")
         if description:
-            print(f"  Description: {description}")
+            LOGGER.debug(f"  Description: {description}")
         if data_dir:
-            print(f"  Data directory: {data_dir}")
+            LOGGER.debug(f"  Data directory: {data_dir}")
 
         return project_id
 
@@ -63,7 +59,7 @@ class ProjectService:
             Dictionary mapping project IDs to ProjectStats
         """
         # Get all documents and group by project_id
-        all_stats = self.registry.get_processing_stats()
+        self.registry.get_processing_stats()  # Ensure registry is accessible
 
         # For now, we'll identify projects by looking at project_id attributes
         # This is a simplified approach - future versions could have a projects table
@@ -125,8 +121,7 @@ class ProjectService:
             # Get documents by status and filter by project
             all_docs = self.registry.get_documents_by_status(status)
             return [doc for doc in all_docs if getattr(doc, "project_id", None) == project_id]
-        else:
-            return self.registry.get_documents_by_project(project_id)
+        return self.registry.get_documents_by_project(project_id)
 
     def find_recent_pdfs(
         self,
@@ -150,15 +145,15 @@ class ProjectService:
         if not data_path.exists():
             raise FileNotFoundError(f"Data directory not found: {data_path}")
 
-        print(f"🔍 Scanning for PDFs in: {data_path}")
+        LOGGER.info(f"Scanning for PDFs in: {data_path} (including subdirectories)")
 
-        # Find all PDF files
-        pdf_files = list(data_path.glob("*.pdf"))
+        # Find all PDF files recursively in subdirectories
+        pdf_files = list(data_path.glob("**/*.pdf"))
 
         if not pdf_files:
-            raise FileNotFoundError(f"No PDF files found in {data_path}")
+            raise FileNotFoundError(f"No PDF files found in {data_path} or its subdirectories")
 
-        print(f"📄 Found {len(pdf_files)} PDF files")
+        LOGGER.info(f"Found {len(pdf_files)} PDF files in directory tree")
 
         # Get file info with modification time
         file_info = []
@@ -170,13 +165,13 @@ class ProjectService:
                     "name": pdf_file.name,
                     "size_mb": round(stat.st_size / (1024 * 1024), 2),
                     "modified_time": stat.st_mtime,
-                    "modified_date": datetime.fromtimestamp(stat.st_mtime).strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    ),
+                    "modified_date": datetime.datetime.fromtimestamp(
+                        stat.st_mtime, tz=datetime.UTC
+                    ).strftime("%Y-%m-%d %H:%M:%S"),
                     "project_id": project_id,
                 })
             except Exception as e:
-                print(f"⚠ Error reading {pdf_file}: {e}")
+                LOGGER.warning(f"Error reading {pdf_file}: {e}")
                 continue
 
         # Sort by modification time (most recent first)
@@ -185,15 +180,17 @@ class ProjectService:
         # Take the most recent files
         recent_files = file_info[:num_files]
 
-        print(f"📅 Selected {len(recent_files)} most recent files:")
+        LOGGER.info(f"Selected {len(recent_files)} most recent files:")
         if recent_files:
-            print(f"   Newest: {recent_files[0]['name']} ({recent_files[0]['modified_date']})")
+            newest = recent_files[0]
+            LOGGER.debug(f"   Newest: {newest['name']} ({newest['modified_date']})")
             if len(recent_files) > 1:
-                print(f"   Oldest: {recent_files[-1]['name']} ({recent_files[-1]['modified_date']})")
+                oldest = recent_files[-1]
+                LOGGER.debug(f"   Oldest: {oldest['name']} ({oldest['modified_date']})")
 
         # Calculate total size
         total_size = sum(file["size_mb"] for file in recent_files)
-        print(f"💾 Total size: {total_size:.1f} MB")
+        LOGGER.info(f"Total size: {total_size:.1f} MB")
 
         # Save to JSON file if requested
         if output_file:
@@ -203,7 +200,7 @@ class ProjectService:
             with output_path.open("w") as f:
                 json.dump(recent_files, f, indent=2)
 
-            print(f"💾 Saved file list to: {output_path}")
+            LOGGER.info(f"Saved file list to: {output_path}")
 
         return recent_files
 
@@ -223,7 +220,7 @@ class ProjectService:
         Returns:
             List of documents matching criteria
         """
-        print(f"🔍 Creating document subset '{subset_name}' with criteria: {criteria}")
+        LOGGER.info(f"Creating document subset '{subset_name}' with criteria: {criteria}")
 
         # Start with all documents or project documents
         if project_id:
@@ -288,17 +285,11 @@ class ProjectService:
         if "limit" in criteria:
             filtered_docs = filtered_docs[:criteria["limit"]]
 
-        print(f"✓ Found {len(filtered_docs)} documents matching criteria")
+        LOGGER.info(f"Found {len(filtered_docs)} documents matching criteria")
 
         # Could save subset definition for future use
-        subset_info = {
-            "subset_name": subset_name,
-            "criteria": criteria,
-            "project_id": project_id,
-            "created_date": datetime.now().isoformat(),
-            "document_count": len(filtered_docs),
-            "document_ids": [doc.doc_id for doc in filtered_docs],
-        }
+        # subset_info would contain: subset_name, criteria, project_id, created_date,
+        # document_count, document_ids
 
         return filtered_docs
 
@@ -354,7 +345,7 @@ class ProjectService:
 
         export_data = {
             "project_id": project_id,
-            "export_date": datetime.now().isoformat(),
+            "export_date": datetime.datetime.now().isoformat(),
             "stats": {
                 "total_documents": stats.total_documents,
                 "indexed_count": stats.indexed_count,
@@ -387,9 +378,9 @@ class ProjectService:
         with output_path.open("w") as f:
             json.dump(export_data, f, indent=2)
 
-        print(f"✓ Exported project data to: {output_path}")
-        print(f"  Documents: {len(documents)}")
-        print(f"  Size: {output_path.stat().st_size / 1024:.1f} KB")
+        LOGGER.info(f"Exported project data to: {output_path}")
+        LOGGER.debug(f"  Documents: {len(documents)}")
+        LOGGER.debug(f"  Size: {output_path.stat().st_size / 1024:.1f} KB")
 
         return {
             "output_file": str(output_path),

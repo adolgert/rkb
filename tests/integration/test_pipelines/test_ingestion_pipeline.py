@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from rkb.core.document_registry import DocumentRegistry
-from rkb.core.models import Document, DocumentStatus, ExtractionResult, EmbeddingResult
+from rkb.core.models import DocumentStatus, EmbeddingResult, ExtractionResult
 from rkb.pipelines.ingestion_pipeline import IngestionPipeline
 
 
@@ -24,6 +24,7 @@ class TestIngestionPipeline:
         yield registry
 
         # Cleanup
+        registry.close()
         if db_path.exists():
             db_path.unlink()
 
@@ -76,10 +77,12 @@ class TestIngestionPipeline:
         if pdf_path.exists():
             pdf_path.unlink()
 
-    def test_process_single_document_success(self, temp_db, mock_extractor, mock_embedder, sample_pdf):
+    def test_process_single_document_success(
+        self, temp_db, mock_extractor, mock_embedder, sample_pdf
+    ):
         """Test successful processing of a single document."""
-        with patch('rkb.pipelines.ingestion_pipeline.get_extractor', return_value=mock_extractor), \
-             patch('rkb.pipelines.ingestion_pipeline.get_embedder', return_value=mock_embedder):
+        with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
+             patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
             pipeline = IngestionPipeline(
                 registry=temp_db,
@@ -104,16 +107,19 @@ class TestIngestionPipeline:
             assert doc.status == DocumentStatus.INDEXED
             assert doc.source_path == sample_pdf
 
-            # Check extraction was called
-            mock_extractor.extract.assert_called_once_with(sample_pdf)
+            # Check extraction was called with source_path and doc_id
+            assert mock_extractor.extract.call_count == 1
+            call_args = mock_extractor.extract.call_args
+            assert call_args[0][0] == sample_pdf  # source_path
+            assert len(call_args[0][1]) == 36  # doc_id is UUID (36 chars)
 
             # Check embedder was called
             assert mock_embedder.embed.called
 
     def test_process_single_document_missing_file(self, temp_db, mock_extractor, mock_embedder):
         """Test processing of non-existent file."""
-        with patch('rkb.pipelines.ingestion_pipeline.get_extractor', return_value=mock_extractor), \
-             patch('rkb.pipelines.ingestion_pipeline.get_embedder', return_value=mock_embedder):
+        with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
+             patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
             pipeline = IngestionPipeline(
                 registry=temp_db,
@@ -130,15 +136,16 @@ class TestIngestionPipeline:
             # Extractor should not be called
             mock_extractor.extract.assert_not_called()
 
-    def test_process_single_document_already_exists(self, temp_db, mock_extractor, mock_embedder, sample_pdf):
+    def test_process_single_document_already_exists(
+        self, temp_db, mock_extractor, mock_embedder, sample_pdf
+    ):
         """Test processing of document that already exists."""
-        with patch('rkb.pipelines.ingestion_pipeline.get_extractor', return_value=mock_extractor), \
-             patch('rkb.pipelines.ingestion_pipeline.get_embedder', return_value=mock_embedder):
+        with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
+             patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
-            # Add document to registry first
-            doc = Document(source_path=sample_pdf, status=DocumentStatus.INDEXED)
-            doc.project_id = "test"  # Set as attribute
-            temp_db.add_document(doc)
+            # Add document to registry first using the new deduplication method
+            doc, _ = temp_db.process_new_document(sample_pdf, "test")
+            temp_db.update_document_status(doc.doc_id, DocumentStatus.INDEXED)
 
             pipeline = IngestionPipeline(
                 registry=temp_db,
@@ -156,8 +163,8 @@ class TestIngestionPipeline:
 
     def test_process_batch_from_list(self, temp_db, mock_extractor, mock_embedder, sample_pdf):
         """Test batch processing from file list."""
-        with patch('rkb.pipelines.ingestion_pipeline.get_extractor', return_value=mock_extractor), \
-             patch('rkb.pipelines.ingestion_pipeline.get_embedder', return_value=mock_embedder):
+        with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
+             patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
             pipeline = IngestionPipeline(
                 registry=temp_db,
@@ -178,8 +185,8 @@ class TestIngestionPipeline:
 
     def test_process_batch_with_max_files(self, temp_db, mock_extractor, mock_embedder):
         """Test batch processing with max_files limit."""
-        with patch('rkb.pipelines.ingestion_pipeline.get_extractor', return_value=mock_extractor), \
-             patch('rkb.pipelines.ingestion_pipeline.get_embedder', return_value=mock_embedder):
+        with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
+             patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
             pipeline = IngestionPipeline(
                 registry=temp_db,
@@ -200,8 +207,8 @@ class TestIngestionPipeline:
 
     def test_get_processing_stats(self, temp_db, mock_extractor, mock_embedder, sample_pdf):
         """Test getting processing statistics."""
-        with patch('rkb.pipelines.ingestion_pipeline.get_extractor', return_value=mock_extractor), \
-             patch('rkb.pipelines.ingestion_pipeline.get_embedder', return_value=mock_embedder):
+        with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
+             patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
             pipeline = IngestionPipeline(
                 registry=temp_db,
@@ -226,8 +233,8 @@ class TestIngestionPipeline:
 
     def test_list_documents_by_project(self, temp_db, mock_extractor, mock_embedder, sample_pdf):
         """Test listing documents by project."""
-        with patch('rkb.pipelines.ingestion_pipeline.get_extractor', return_value=mock_extractor), \
-             patch('rkb.pipelines.ingestion_pipeline.get_embedder', return_value=mock_embedder):
+        with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
+             patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
             pipeline = IngestionPipeline(
                 registry=temp_db,
@@ -248,16 +255,12 @@ class TestIngestionPipeline:
 
     def test_retry_failed_documents(self, temp_db, mock_extractor, mock_embedder, sample_pdf):
         """Test retrying failed documents."""
-        with patch('rkb.pipelines.ingestion_pipeline.get_extractor', return_value=mock_extractor), \
-             patch('rkb.pipelines.ingestion_pipeline.get_embedder', return_value=mock_embedder):
+        with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
+             patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
-            # Create a failed document in the registry
-            doc = Document(
-                source_path=sample_pdf,
-                status=DocumentStatus.FAILED,
-            )
-            doc.project_id = "test_retry"  # Set as attribute
-            temp_db.add_document(doc)
+            # Create a failed document in the registry using new deduplication method
+            doc, _ = temp_db.process_new_document(sample_pdf, "test_retry")
+            temp_db.update_document_status(doc.doc_id, DocumentStatus.FAILED)
 
             pipeline = IngestionPipeline(
                 registry=temp_db,

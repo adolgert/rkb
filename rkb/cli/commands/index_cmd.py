@@ -1,4 +1,5 @@
 """Index command - Create embeddings and index documents for search."""
+# ruff: noqa: T201
 
 import argparse
 from pathlib import Path
@@ -127,9 +128,9 @@ def execute(args: argparse.Namespace) -> int:
         print(f"🔗 Successfully indexed: {results['successful_embeddings']}")
         print(f"❌ Failed indexing: {results['failed_embeddings']}")
 
-        if results['successful_embeddings'] > 0:
-            print(f"\n🔍 Ready for semantic search!")
-            print(f"   Run: rkb search \"your query here\"")
+        if results["successful_embeddings"] > 0:
+            print("\n🔍 Ready for semantic search!")
+            print('   Run: rkb search "your query here"')
 
         return 0
 

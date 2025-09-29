@@ -1,7 +1,7 @@
 """Search command - Perform semantic search over indexed documents."""
+# ruff: noqa: T201
 
 import argparse
-import sys
 from pathlib import Path
 
 from rkb.core.document_registry import DocumentRegistry
@@ -111,8 +111,8 @@ def execute(args: argparse.Namespace) -> int:
             print(f"Total chunks: {stats.get('total_chunks', 0):,}")
             print(f"Equation percentage: {stats.get('equation_percentage', 0):.1f}%")
             print(f"Collection: {stats.get('collection_name', 'N/A')}")
-            if 'registry_stats' in stats:
-                reg_stats = stats['registry_stats']
+            if "registry_stats" in stats:
+                reg_stats = stats["registry_stats"]
                 print(f"Documents in registry: {reg_stats.get('total_documents', 0)}")
             return 0
 
@@ -121,15 +121,14 @@ def execute(args: argparse.Namespace) -> int:
             # Single query mode
             query = " ".join(args.query)
             return _perform_search(search_service, query, args)
-        elif args.interactive:
+        if args.interactive:
             # Interactive mode
             return _interactive_search(search_service, args)
-        else:
-            # No query provided, default to interactive mode
-            print("🔍 Interactive Search Mode")
-            print("Type your queries (press Ctrl+C to exit)")
-            print()
-            return _interactive_search(search_service, args)
+        # No query provided, default to interactive mode
+        print("🔍 Interactive Search Mode")
+        print("Type your queries (press Ctrl+C to exit)")
+        print()
+        return _interactive_search(search_service, args)
 
     except Exception as e:
         print(f"✗ Search failed: {e}")
@@ -173,12 +172,12 @@ def _interactive_search(search_service: SearchService, args: argparse.Namespace)
                     continue
 
                 # Handle special commands
-                if query.lower() in ['exit', 'quit', 'q']:
+                if query.lower() in ["exit", "quit", "q"]:
                     break
-                elif query.lower() in ['help', 'h']:
+                if query.lower() in ["help", "h"]:
                     _show_help()
                     continue
-                elif query.lower() == 'stats':
+                if query.lower() == "stats":
                     stats = search_service.get_database_stats()
                     print(f"📊 Total chunks: {stats.get('total_chunks', 0):,}")
                     print(f"📈 Equation percentage: {stats.get('equation_percentage', 0):.1f}%")

@@ -50,7 +50,7 @@ class TestOllamaEmbedder:
         assert capabilities["description"]
         assert "mxbai-embed-large" in capabilities["supported_models"]
         assert "batch_processing" in capabilities["features"]
-        assert "model" in capabilities["configuration"]
+        assert "model_name" in capabilities["configuration"]
 
     def test_embed_empty_texts(self):
         """Test embedding empty text list."""

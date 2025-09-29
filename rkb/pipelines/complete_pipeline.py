@@ -1,14 +1,17 @@
 """Complete pipeline for document discovery, processing, and indexing."""
 
+import datetime
 import json
+import logging
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from rkb.core.document_registry import DocumentRegistry
 from rkb.core.models import DocumentStatus
 from rkb.pipelines.ingestion_pipeline import IngestionPipeline
+
+LOGGER = logging.getLogger("rkb.pipelines.complete_pipeline")
 
 
 class CompletePipeline:
@@ -60,7 +63,7 @@ class CompletePipeline:
         if not data_path.exists():
             raise FileNotFoundError(f"Data directory not found: {data_path}")
 
-        print(f"🔍 Scanning for PDFs in: {data_path}")
+        LOGGER.info(f"Scanning for PDFs in: {data_path}")
 
         # Find all PDF files
         pdf_files = list(data_path.glob("*.pdf"))
@@ -68,7 +71,7 @@ class CompletePipeline:
         if not pdf_files:
             raise FileNotFoundError(f"No PDF files found in {data_path}")
 
-        print(f"📄 Found {len(pdf_files)} PDF files")
+        LOGGER.info(f"Found {len(pdf_files)} PDF files")
 
         # Get file info with modification time
         file_info = []
@@ -80,10 +83,12 @@ class CompletePipeline:
                     "name": pdf_file.name,
                     "size_mb": round(stat.st_size / (1024 * 1024), 2),
                     "modified_time": stat.st_mtime,
-                    "modified_date": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                    "modified_date": datetime.datetime.fromtimestamp(
+                        stat.st_mtime, tz=datetime.UTC
+                    ).strftime("%Y-%m-%d %H:%M:%S"),
                 })
             except Exception as e:
-                print(f"⚠ Error reading {pdf_file}: {e}")
+                LOGGER.warning(f"Error reading {pdf_file}: {e}")
                 continue
 
         # Sort by modification time (most recent first)
@@ -92,25 +97,27 @@ class CompletePipeline:
         # Take the most recent files
         recent_files = file_info[:num_files]
 
-        print(f"📅 Selected {len(recent_files)} most recent files:")
+        LOGGER.info(f"Selected {len(recent_files)} most recent files:")
         if recent_files:
-            print(f"   Newest: {recent_files[0]['name']} ({recent_files[0]['modified_date']})")
+            newest = recent_files[0]
+            LOGGER.debug(f"   Newest: {newest['name']} ({newest['modified_date']})")
             if len(recent_files) > 1:
-                print(f"   Oldest: {recent_files[-1]['name']} ({recent_files[-1]['modified_date']})")
+                oldest = recent_files[-1]
+                LOGGER.debug(f"   Oldest: {oldest['name']} ({oldest['modified_date']})")
 
         # Calculate total size
         total_size = sum(file["size_mb"] for file in recent_files)
-        print(f"💾 Total size: {total_size:.1f} MB")
+        LOGGER.info(f"Total size: {total_size:.1f} MB")
 
         # Save to JSON file if requested
         if output_file:
             output_path = Path(output_file)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            with open(output_path, "w") as f:
+            with output_path.open("w") as f:
                 json.dump(recent_files, f, indent=2)
 
-            print(f"💾 Saved file list to: {output_path}")
+            LOGGER.info(f"Saved file list to: {output_path}")
 
         return recent_files
 
@@ -138,15 +145,14 @@ class CompletePipeline:
         Returns:
             Dictionary with pipeline results and statistics
         """
-        print("🚀 RKB Complete Processing Pipeline")
-        print("=" * 50)
-        print(f"📁 Source directory: {data_dir}")
-        print(f"📄 Number of files: {num_files}")
-        print(f"📖 Max pages per PDF: {max_pages}")
-        print(f"🔄 Force reprocess: {force_reprocess}")
-        print(f"🧪 Test mode: {test_mode}")
-        print(f"🗂 Project ID: {self.project_id}")
-        print()
+        LOGGER.info("RKB Complete Processing Pipeline")
+        LOGGER.info("=" * 50)
+        LOGGER.info(f"Source directory: {data_dir}")
+        LOGGER.info(f"Number of files: {num_files}")
+        LOGGER.info(f"Max pages per PDF: {max_pages}")
+        LOGGER.info(f"Force reprocess: {force_reprocess}")
+        LOGGER.info(f"Test mode: {test_mode}")
+        LOGGER.info(f"Project ID: {self.project_id}")
 
         start_time = time.time()
         pipeline_results = {
@@ -167,7 +173,7 @@ class CompletePipeline:
 
         try:
             # Step 1: Find recent PDFs
-            print("📋 Step 1: Finding recent PDFs...")
+            LOGGER.info("Step 1: Finding recent PDFs...")
             try:
                 recent_files = self.find_recent_pdfs(
                     data_dir=data_dir,
@@ -183,18 +189,18 @@ class CompletePipeline:
                     "total_size_mb": sum(f["size_mb"] for f in recent_files),
                 }
 
-                print(f"✓ Found {len(recent_files)} recent PDFs")
+                LOGGER.info(f"Found {len(recent_files)} recent PDFs")
 
             except Exception as e:
                 pipeline_results["steps"]["find_files"] = {
                     "success": False,
                     "error": str(e),
                 }
-                print(f"✗ Error finding PDFs: {e}")
+                LOGGER.exception("Error finding PDFs")
                 return pipeline_results
 
             # Step 2: Process documents through ingestion pipeline
-            print("\n🔍 Step 2: Processing documents through ingestion pipeline...")
+            LOGGER.info("Step 2: Processing documents through ingestion pipeline...")
             try:
                 # Limit files in test mode
                 files_to_process = recent_files[:3] if test_mode else recent_files
@@ -223,18 +229,18 @@ class CompletePipeline:
                 if success_count == 0:
                     raise ValueError("No successful document processing")
 
-                print(f"✓ Processed {success_count}/{len(files_to_process)} documents")
+                LOGGER.info(f"Processed {success_count}/{len(files_to_process)} documents")
 
             except Exception as e:
                 pipeline_results["steps"]["process_documents"] = {
                     "success": False,
                     "error": str(e),
                 }
-                print(f"✗ Error during document processing: {e}")
+                LOGGER.exception("Error during document processing")
                 return pipeline_results
 
             # Step 3: Get processing statistics
-            print("\n📊 Step 3: Gathering processing statistics...")
+            LOGGER.info("Step 3: Gathering processing statistics...")
             try:
                 stats = self.ingestion_pipeline.get_processing_stats()
                 pipeline_results["steps"]["statistics"] = {
@@ -242,18 +248,18 @@ class CompletePipeline:
                     "stats": stats,
                 }
 
-                print("✓ Pipeline statistics gathered")
-                print(f"   Total documents: {stats['total_documents']}")
-                print(f"   Total extractions: {stats['total_extractions']}")
-                print(f"   Total embeddings: {stats['total_embeddings']}")
-                print(f"   Total chunks: {stats['total_chunks_embedded']}")
+                LOGGER.info("Pipeline statistics gathered")
+                LOGGER.debug(f"   Total documents: {stats['total_documents']}")
+                LOGGER.debug(f"   Total extractions: {stats['total_extractions']}")
+                LOGGER.debug(f"   Total embeddings: {stats['total_embeddings']}")
+                LOGGER.debug(f"   Total chunks: {stats['total_chunks_embedded']}")
 
             except Exception as e:
                 pipeline_results["steps"]["statistics"] = {
                     "success": False,
                     "error": str(e),
                 }
-                print(f"⚠ Error gathering statistics: {e}")
+                LOGGER.warning(f"Error gathering statistics: {e}")
 
             # Pipeline completion
             end_time = time.time()
@@ -261,27 +267,27 @@ class CompletePipeline:
 
             # Calculate statistics for CLI compatibility
             proc_stats = pipeline_results["steps"]["process_documents"]
-            total_processed = proc_stats['total_files']
-            successful_extractions = proc_stats['successful']
-            failed_extractions = proc_stats['errors']
+            total_processed = proc_stats["total_files"]
+            successful_extractions = proc_stats["successful"]
+            failed_extractions = proc_stats["errors"]
 
             # Count embeddings from processing results
             successful_embeddings = 0
             failed_embeddings = 0
-            for result in proc_stats.get('results', []):
-                if result.get('status') == 'success' and not result.get('embedding_skipped', False):
+            for result in proc_stats.get("results", []):
+                if result.get("status") == "success" and not result.get("embedding_skipped", False):
                     successful_embeddings += 1
-                elif result.get('status') == 'success' and result.get('embedding_skipped', False):
+                elif result.get("status") == "success" and result.get("embedding_skipped", False):
                     # Extraction succeeded but embedding was skipped
                     pass
-                elif result.get('status') == 'error':
+                elif result.get("status") == "error":
                     # Could be extraction or embedding failure - need more granular tracking
                     failed_embeddings += 1
 
             pipeline_results.update({
                 "success": True,
                 "duration_seconds": round(duration, 1),
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.datetime.now().isoformat(),
                 # Add CLI-expected keys
                 "documents_processed": total_processed,
                 "successful_extractions": successful_extractions,
@@ -291,24 +297,24 @@ class CompletePipeline:
             })
 
             # Print summary
-            print("\n🎉 Pipeline Summary")
-            print("=" * 50)
-            print(f"⏱ Total time: {duration:.1f} seconds")
-            print(f"📄 Files found: {pipeline_results['steps']['find_files']['files_found']}")
+            LOGGER.info("Pipeline Summary")
+            LOGGER.info("=" * 50)
+            LOGGER.info(f"Total time: {duration:.1f} seconds")
+            LOGGER.info(f"Files found: {pipeline_results['steps']['find_files']['files_found']}")
 
-            print(f"📚 Documents processed: {successful_extractions}/{total_processed}")
+            LOGGER.info(f"Documents processed: {successful_extractions}/{total_processed}")
             if failed_extractions > 0:
-                print(f"❌ Processing errors: {failed_extractions}")
+                LOGGER.warning(f"Processing errors: {failed_extractions}")
             if proc_stats["skipped"] > 0:
-                print(f"⏭ Skipped: {proc_stats['skipped']}")
+                LOGGER.info(f"Skipped: {proc_stats['skipped']}")
 
-            if "statistics" in pipeline_results["steps"] and pipeline_results["steps"]["statistics"]["success"]:
+            stats_step = pipeline_results["steps"].get("statistics", {})
+            if "statistics" in pipeline_results["steps"] and stats_step["success"]:
                 stats = pipeline_results["steps"]["statistics"]["stats"]
-                print(f"🗄 Total chunks indexed: {stats['total_chunks_embedded']}")
+                LOGGER.info(f"Total chunks indexed: {stats['total_chunks_embedded']}")
 
-            print(f"🗂 Project ID: {self.project_id}")
-            print()
-            print("🚀 Ready for semantic search!")
+            LOGGER.info(f"Project ID: {self.project_id}")
+            LOGGER.info("Ready for semantic search!")
 
             return pipeline_results
 
@@ -320,7 +326,7 @@ class CompletePipeline:
                 "success": False,
                 "duration_seconds": round(duration, 1),
                 "error": str(e),
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.datetime.now().isoformat(),
                 # Add CLI-expected keys with zero values
                 "documents_processed": 0,
                 "successful_extractions": 0,
@@ -329,7 +335,7 @@ class CompletePipeline:
                 "failed_embeddings": 0,
             })
 
-            print(f"\n❌ Pipeline failed after {duration:.1f} seconds: {e}")
+            LOGGER.exception(f"Pipeline failed after {duration:.1f} seconds")
             return pipeline_results
 
     def validate_prerequisites(self, data_dir: str | Path = "data/initial") -> bool:
@@ -341,45 +347,45 @@ class CompletePipeline:
         Returns:
             True if all prerequisites are met
         """
-        print("🔧 Checking prerequisites...")
+        LOGGER.info("🔧 Checking prerequisites...")
 
         # Check data directory
         data_path = Path(data_dir)
         if not data_path.exists():
-            print(f"✗ Data directory not found: {data_path}")
+            LOGGER.error(f"✗ Data directory not found: {data_path}")
             return False
 
         pdf_count = len(list(data_path.glob("*.pdf")))
         if pdf_count == 0:
-            print(f"✗ No PDF files found in {data_path}")
+            LOGGER.error(f"✗ No PDF files found in {data_path}")
             return False
 
-        print(f"✓ Found {pdf_count} PDFs in data directory")
+        LOGGER.info(f"✓ Found {pdf_count} PDFs in data directory")
 
         # Check extractor
         try:
             extractor = self.ingestion_pipeline.extractor
-            capabilities = extractor.get_capabilities()
-            print(f"✓ Extractor '{extractor.name}' is available")
-        except Exception as e:
-            print(f"✗ Extractor check failed: {e}")
+            extractor.get_capabilities()  # Test that extractor is functional
+            LOGGER.info(f"✓ Extractor '{extractor.name}' is available")
+        except Exception:
+            LOGGER.exception("✗ Extractor check failed")
             return False
 
         # Check embedder
         try:
             embedder = self.ingestion_pipeline.embedder
-            capabilities = embedder.get_capabilities()
-            print(f"✓ Embedder '{embedder.name}' is available")
-        except Exception as e:
-            print(f"✗ Embedder check failed: {e}")
+            embedder.get_capabilities()  # Test that embedder is functional
+            LOGGER.info(f"✓ Embedder '{embedder.name}' is available")
+        except Exception:
+            LOGGER.exception("✗ Embedder check failed")
             return False
 
         # Test database connectivity
         try:
-            stats = self.registry.get_processing_stats()
-            print("✓ Document registry is functional")
-        except Exception as e:
-            print(f"✗ Document registry check failed: {e}")
+            self.registry.get_processing_stats()  # Test that registry is functional
+            LOGGER.info("✓ Document registry is functional")
+        except Exception:
+            LOGGER.exception("✗ Document registry check failed")
             return False
 
         return True
@@ -459,24 +465,23 @@ class CompletePipeline:
                 "failed_embeddings": failed_embeddings,
                 "results": results,
             }
-        else:
-            # Regular processing
-            pdf_list = [str(path) for path in pdf_paths]
-            results = self.ingestion_pipeline.process_batch(
-                pdf_list=pdf_list,
-                force_reprocess=force_reprocess
-            )
+        # Regular processing
+        pdf_list = [str(path) for path in pdf_paths]
+        results = self.ingestion_pipeline.process_batch(
+            pdf_list=pdf_list,
+            force_reprocess=force_reprocess
+        )
 
-            # Count results
-            successful = len([r for r in results if r.get('status') == 'success'])
-            failed = len([r for r in results if r.get('status') == 'error'])
+        # Count results
+        successful = len([r for r in results if r.get("status") == "success"])
+        failed = len([r for r in results if r.get("status") == "error"])
 
-            # For full processing, successful extractions = successful embeddings
-            return {
-                "documents_processed": len(pdf_paths),
-                "successful_extractions": successful,
-                "failed_extractions": failed,
-                "successful_embeddings": successful,
-                "failed_embeddings": failed,
-                "results": results,
-            }
+        # For full processing, successful extractions = successful embeddings
+        return {
+            "documents_processed": len(pdf_paths),
+            "successful_extractions": successful,
+            "failed_extractions": failed,
+            "successful_embeddings": successful,
+            "failed_embeddings": failed,
+            "results": results,
+        }

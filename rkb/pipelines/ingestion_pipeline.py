@@ -1,6 +1,7 @@
 """Ingestion pipeline for processing documents through extraction and embedding."""
 
 import json
+import logging
 import time
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +12,8 @@ from rkb.core.models import Document, DocumentStatus
 from rkb.core.text_processing import chunk_text_by_pages, extract_equations
 from rkb.embedders.base import get_embedder
 from rkb.extractors.base import get_extractor
+
+LOGGER = logging.getLogger("rkb.pipelines.ingestion_pipeline")
 
 
 class IngestionPipeline:
@@ -68,43 +71,39 @@ class IngestionPipeline:
                 "source_path": str(source_path),
             }
 
-        # Check if document already exists
-        if not force_reprocess and self.registry.document_exists(source_path):
-            return {
-                "status": "skipped",
-                "message": "Document already processed",
-                "source_path": str(source_path),
-            }
-
         start_time = time.time()
 
         try:
-            # Create document record
-            document = Document(
-                source_path=source_path,
-                status=DocumentStatus.EXTRACTING,
-            )
-            # Set project_id as attribute (used by registry)
-            if self.project_id:
-                document.project_id = self.project_id
+            # Check if document already exists using the new method
+            document, is_new = self.registry.process_new_document(source_path, self.project_id)
 
-            # Add to registry
-            if not self.registry.add_document(document):
-                # Document already exists, get it
-                existing_doc = self.registry.get_document_by_path(source_path)
-                if existing_doc and not force_reprocess:
-                    return {
-                        "status": "skipped",
-                        "message": "Document already in registry",
-                        "source_path": str(source_path),
-                        "doc_id": existing_doc.doc_id,
-                    }
-                document = existing_doc
+            if document.status == DocumentStatus.INDEXED and not force_reprocess:
+                return {
+                    "status": "skipped",
+                    "message": "Document already fully processed",
+                    "source_path": str(source_path),
+                    "doc_id": document.doc_id,
+                }
 
-            print(f"🔄 Processing: {source_path.name}")
+            if not is_new and not force_reprocess:
+                return {
+                    "status": "duplicate",
+                    "message": "Document already exists with content hash",
+                    "source_path": str(source_path),
+                    "doc_id": document.doc_id,
+                    "content_hash": document.content_hash,
+                }
 
-            # Extract content
-            extraction_result = self.extractor.extract(source_path)
+            LOGGER.info(f"Processing: {source_path.name} (doc_id: {document.doc_id[:8]}...)")
+
+            # Update document status
+            self.registry.update_document_status(document.doc_id, DocumentStatus.EXTRACTING)
+
+            # Extract content - pass doc_id for consistent naming
+            extraction_result = self.extractor.extract(source_path, document.doc_id)
+
+            # Set document ID in extraction result
+            extraction_result.doc_id = document.doc_id
 
             if extraction_result.status.value != "complete":
                 # Update document status to failed
@@ -128,7 +127,7 @@ class IngestionPipeline:
 
                 # Chunk the text
                 chunks = chunk_text_by_pages(extraction_result.content, max_chunk_size)
-                print(f"  📝 Created {len(chunks)} chunks")
+                LOGGER.debug(f"  Created {len(chunks)} chunks")
 
                 if chunks and not self.skip_embedding:
                     # Generate embeddings only if not skipping
@@ -145,7 +144,7 @@ class IngestionPipeline:
                         self.registry.add_embedding(embedding_result)
 
                         if embedding_result.error_message:
-                            print(f"  ⚠ Embedding errors: {embedding_result.error_message}")
+                            LOGGER.warning(f"  Embedding errors: {embedding_result.error_message}")
 
             # Update document status based on whether embedding was skipped
             if self.skip_embedding:
@@ -156,7 +155,7 @@ class IngestionPipeline:
                 self.registry.update_document_status(document.doc_id, DocumentStatus.INDEXED)
 
             processing_time = time.time() - start_time
-            print(f"  ✓ Completed in {processing_time:.1f}s")
+            LOGGER.info(f"  Completed in {processing_time:.1f}s")
 
             # Calculate chunk information
             chunk_count = len(chunks) if extraction_result.content else 0
@@ -172,7 +171,9 @@ class IngestionPipeline:
                 "extraction_id": extraction_result.extraction_id,
                 "chunk_count": chunk_count,
                 "valid_chunk_count": valid_chunk_count,
-                "has_equations": equation_info["has_equations"] if extraction_result.content else False,
+                "has_equations": equation_info["has_equations"]
+                if extraction_result.content
+                else False,
                 "processing_time": round(processing_time, 1),
                 "timestamp": datetime.now().isoformat(),
                 "embedding_skipped": self.skip_embedding,
@@ -184,7 +185,7 @@ class IngestionPipeline:
                 self.registry.update_document_status(document.doc_id, DocumentStatus.FAILED)
 
             processing_time = time.time() - start_time
-            print(f"  ✗ Error: {e}")
+            LOGGER.exception("  Error")
 
             return {
                 "status": "error",
@@ -221,7 +222,7 @@ class IngestionPipeline:
             if not pdf_list_path.exists():
                 raise FileNotFoundError(f"PDF list file not found: {pdf_list_path}")
 
-            with open(pdf_list_path) as f:
+            with pdf_list_path.open() as f:
                 pdf_files = json.load(f)
         else:
             pdf_files = pdf_list
@@ -236,7 +237,7 @@ class IngestionPipeline:
         if max_files:
             file_paths = file_paths[:max_files]
 
-        print(f"📄 Processing {len(file_paths)} documents...")
+        LOGGER.info(f"Processing {len(file_paths)} documents...")
 
         # Process each file
         results = []
@@ -246,7 +247,7 @@ class IngestionPipeline:
         start_time = time.time()
 
         for i, file_path in enumerate(file_paths, 1):
-            print(f"\n[{i}/{len(file_paths)}] {Path(file_path).name}")
+            LOGGER.info(f"[{i}/{len(file_paths)}] {Path(file_path).name}")
 
             result = self.process_single_document(
                 Path(file_path),
@@ -281,23 +282,23 @@ class IngestionPipeline:
 
                 log_path = Path(log_file)
                 log_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(log_path, "w") as f:
+                with log_path.open("w") as f:
                     json.dump(log_data, f, indent=2)
 
         total_time = time.time() - start_time
 
         # Print summary
-        print("\n📊 Processing Summary:")
-        print(f"   Total files: {len(file_paths)}")
-        print(f"   Successful: {success_count}")
-        print(f"   Errors: {error_count}")
-        print(f"   Skipped: {skip_count}")
-        print(f"   Total time: {total_time/60:.1f} minutes")
+        LOGGER.info("Processing Summary:")
+        LOGGER.info(f"   Total files: {len(file_paths)}")
+        LOGGER.info(f"   Successful: {success_count}")
+        LOGGER.info(f"   Errors: {error_count}")
+        LOGGER.info(f"   Skipped: {skip_count}")
+        LOGGER.info(f"   Total time: {total_time / 60:.1f} minutes")
         if success_count > 0:
-            print(f"   Avg time per file: {total_time/success_count:.1f}s")
+            LOGGER.info(f"   Avg time per file: {total_time / success_count:.1f}s")
 
         if log_file:
-            print(f"\n💾 Results saved to: {log_file}")
+            LOGGER.info(f"Results saved to: {log_file}")
 
         return results
 
@@ -310,11 +311,13 @@ class IngestionPipeline:
         stats = self.registry.get_processing_stats()
 
         # Add pipeline-specific information
-        stats.update({
-            "extractor": self.extractor_name,
-            "embedder": self.embedder_name,
-            "project_id": self.project_id,
-        })
+        stats.update(
+            {
+                "extractor": self.extractor_name,
+                "embedder": self.embedder_name,
+                "project_id": self.project_id,
+            }
+        )
 
         return stats
 
@@ -346,10 +349,10 @@ class IngestionPipeline:
         failed_docs = self.registry.get_documents_by_status(DocumentStatus.FAILED)
 
         if not failed_docs:
-            print("No failed documents to retry")
+            LOGGER.info("No failed documents to retry")
             return []
 
-        print(f"🔄 Retrying {len(failed_docs)} failed documents...")
+        LOGGER.info(f"Retrying {len(failed_docs)} failed documents...")
 
         results = []
         for doc in failed_docs:

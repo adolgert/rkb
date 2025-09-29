@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from rkb.core.document_registry import DocumentRegistry
-from rkb.core.models import ExperimentConfig, SearchResult, ChunkResult
+from rkb.core.models import ChunkResult, ExperimentConfig, SearchResult
 from rkb.services.experiment_service import ExperimentService
 
 
@@ -24,6 +24,7 @@ class TestExperimentService:
         yield registry
 
         # Cleanup
+        registry.close()
         if db_path.exists():
             db_path.unlink()
 
@@ -106,9 +107,9 @@ class TestExperimentService:
         service = ExperimentService(registry=temp_db)
 
         # Create multiple experiments
-        exp1 = service.create_experiment("Experiment 1", project_id="project_a")
-        exp2 = service.create_experiment("Experiment 2", project_id="project_b")
-        exp3 = service.create_experiment("Experiment 3", project_id="project_a")
+        service.create_experiment("Experiment 1", project_id="project_a")
+        service.create_experiment("Experiment 2", project_id="project_b")
+        service.create_experiment("Experiment 3", project_id="project_a")
 
         # List all experiments
         all_experiments = service.list_experiments()
@@ -146,7 +147,9 @@ class TestExperimentService:
             project_id="test_project",
         )
 
-        with patch('rkb.services.experiment_service.SearchService', return_value=mock_search_service):
+        with patch(
+            "rkb.services.experiment_service.SearchService", return_value=mock_search_service
+        ):
             queries = ["machine learning", "deep learning"]
             results = service.run_search_experiment(
                 experiment.experiment_id,
@@ -176,7 +179,9 @@ class TestExperimentService:
         exp1 = service.create_experiment("Experiment 1", embedder="chroma")
         exp2 = service.create_experiment("Experiment 2", embedder="ollama")
 
-        with patch('rkb.services.experiment_service.SearchService', return_value=mock_search_service):
+        with patch(
+            "rkb.services.experiment_service.SearchService", return_value=mock_search_service
+        ):
             queries = ["machine learning"]
             comparison = service.compare_experiments(
                 [exp1.experiment_id, exp2.experiment_id],
@@ -342,7 +347,7 @@ class TestExperimentService:
 
             # Verify content
             import json
-            with open(output_file) as f:
+            with output_file.open() as f:
                 data = json.load(f)
 
             assert data["experiment_id"] == experiment.experiment_id
