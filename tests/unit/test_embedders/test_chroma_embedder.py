@@ -86,7 +86,8 @@ class TestChromaEmbedder:
         mock_chromadb.errors.NotFoundError = Exception  # Mock the exception type
 
         # Simulate collection not existing, then created
-        mock_client.get_collection.side_effect = mock_chromadb.errors.NotFoundError("Collection not found")
+        error_msg = "Collection not found"
+        mock_client.get_collection.side_effect = mock_chromadb.errors.NotFoundError(error_msg)
         mock_client.create_collection.return_value = mock_collection
 
         with tempfile.TemporaryDirectory() as temp_dir:

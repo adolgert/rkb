@@ -189,9 +189,11 @@ class ProjectService:
 
         LOGGER.info(f"Selected {len(recent_files)} most recent files:")
         if recent_files:
-            LOGGER.debug(f"   Newest: {recent_files[0]['name']} ({recent_files[0]['modified_date']})")
+            newest = recent_files[0]
+            LOGGER.debug(f"   Newest: {newest['name']} ({newest['modified_date']})")
             if len(recent_files) > 1:
-                LOGGER.debug(f"   Oldest: {recent_files[-1]['name']} ({recent_files[-1]['modified_date']})")
+                oldest = recent_files[-1]
+                LOGGER.debug(f"   Oldest: {oldest['name']} ({oldest['modified_date']})")
 
         # Calculate total size
         total_size = sum(file["size_mb"] for file in recent_files)

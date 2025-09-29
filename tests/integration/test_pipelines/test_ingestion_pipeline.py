@@ -77,7 +77,9 @@ class TestIngestionPipeline:
         if pdf_path.exists():
             pdf_path.unlink()
 
-    def test_process_single_document_success(self, temp_db, mock_extractor, mock_embedder, sample_pdf):
+    def test_process_single_document_success(
+        self, temp_db, mock_extractor, mock_embedder, sample_pdf
+    ):
         """Test successful processing of a single document."""
         with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
              patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
@@ -134,7 +136,9 @@ class TestIngestionPipeline:
             # Extractor should not be called
             mock_extractor.extract.assert_not_called()
 
-    def test_process_single_document_already_exists(self, temp_db, mock_extractor, mock_embedder, sample_pdf):
+    def test_process_single_document_already_exists(
+        self, temp_db, mock_extractor, mock_embedder, sample_pdf
+    ):
         """Test processing of document that already exists."""
         with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
              patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):

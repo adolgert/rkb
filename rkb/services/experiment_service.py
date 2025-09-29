@@ -67,7 +67,8 @@ class ExperimentService:
         # Store experiment configuration
         self.experiments[experiment_config.experiment_id] = experiment_config
 
-        LOGGER.info(f"Created experiment '{experiment_name}' with ID: {experiment_config.experiment_id}")
+        exp_id = experiment_config.experiment_id
+        LOGGER.info(f"Created experiment '{experiment_name}' with ID: {exp_id}")
         LOGGER.debug(f"  Extractor: {extractor}")
         LOGGER.debug(f"  Embedder: {embedder}")
         LOGGER.debug(f"  Chunk size: {chunk_size}")
@@ -127,7 +128,8 @@ class ExperimentService:
 
         LOGGER.info(f"Running search experiment: {experiment.experiment_name}")
         LOGGER.debug(f"   Queries: {len(queries)}")
-        LOGGER.debug(f"   Configuration: {experiment.embedder} embedder, {experiment.search_strategy} strategy")
+        config_msg = f"{experiment.embedder} embedder, {experiment.search_strategy} strategy"
+        LOGGER.debug(f"   Configuration: {config_msg}")
 
         # Initialize search service with experiment configuration
         search_service = SearchService(
@@ -239,7 +241,8 @@ class ExperimentService:
                     if query in exp_results and exp_results[query].chunk_results:
                         avg_sim = exp_results[query].avg_score
                         similarities.append(avg_sim)
-                metric_values[exp_id] = sum(similarities) / len(similarities) if similarities else 0.0
+                avg_similarity = sum(similarities) / len(similarities) if similarities else 0.0
+                metric_values[exp_id] = avg_similarity
 
             elif metric == "result_overlap":
                 # Measure overlap with first experiment (baseline)
@@ -347,7 +350,13 @@ class ExperimentService:
                 "avg_similarity": search_result.avg_score,
                 "chunks": [
                     {
-                        "content": chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content,
+                        "content": (
+                            (
+                                chunk.content[:200] + "..."
+                                if len(chunk.content) > 200
+                                else chunk.content
+                            )
+                        ),
                         "similarity": chunk.similarity,
                         "metadata": chunk.metadata,
                     }

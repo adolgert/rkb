@@ -54,7 +54,7 @@ class TestZoteroWorkflow:
         extractor = MagicMock()
 
         def mock_extract(source_path, doc_id=None):
-            result = ExtractionResult(
+            return ExtractionResult(
                 doc_id=doc_id or "test-doc-id",
                 extraction_id="test-extraction",
                 status=ExtractionStatus.COMPLETE,
@@ -65,7 +65,6 @@ class TestZoteroWorkflow:
                 chunk_metadata=[],
                 page_count=1
             )
-            return result
 
         extractor.extract.side_effect = mock_extract
         return extractor
@@ -78,13 +77,12 @@ class TestZoteroWorkflow:
         embedder = MagicMock()
 
         def mock_embed(chunks):
-            result = EmbeddingResult(
+            return EmbeddingResult(
                 embedding_id="test-embedding",
                 embedder_name="mock_embedder",
                 chunk_count=len(chunks),
                 error_message=None
             )
-            return result
 
         embedder.embed.side_effect = mock_embed
         return embedder

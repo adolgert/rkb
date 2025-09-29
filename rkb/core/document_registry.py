@@ -32,7 +32,6 @@ class DocumentRegistry:
         """
         # Since we use context managers for all DB operations,
         # there's no persistent connection to close.
-        pass
 
     def __enter__(self):
         """Enter context manager."""
@@ -288,22 +287,22 @@ class DocumentRegistry:
                 (project_id,),
             )
 
-            for row in cursor.fetchall():
-                documents.append(
-                    Document(
-                        doc_id=row["doc_id"],
-                        source_path=Path(row["source_path"]) if row["source_path"] else None,
-                        content_hash=row["content_hash"],
-                        title=row["title"],
-                        authors=row["authors"].split(",") if row["authors"] else [],
-                        arxiv_id=row["arxiv_id"],
-                        doi=row["doi"],
-                        version=row["version"],
-                        status=DocumentStatus(row["status"]),
-                        added_date=datetime.fromisoformat(row["added_date"]),
-                        project_id=row["project_id"],
-                    )
+            documents.extend(
+                Document(
+                    doc_id=row["doc_id"],
+                    source_path=Path(row["source_path"]) if row["source_path"] else None,
+                    content_hash=row["content_hash"],
+                    title=row["title"],
+                    authors=row["authors"].split(",") if row["authors"] else [],
+                    arxiv_id=row["arxiv_id"],
+                    doi=row["doi"],
+                    version=row["version"],
+                    status=DocumentStatus(row["status"]),
+                    added_date=datetime.fromisoformat(row["added_date"]),
+                    project_id=row["project_id"],
                 )
+                for row in cursor.fetchall()
+            )
 
         return documents
 
@@ -327,22 +326,22 @@ class DocumentRegistry:
                 (status.value,),
             )
 
-            for row in cursor.fetchall():
-                documents.append(
-                    Document(
-                        doc_id=row["doc_id"],
-                        source_path=Path(row["source_path"]) if row["source_path"] else None,
-                        content_hash=row["content_hash"],
-                        title=row["title"],
-                        authors=row["authors"].split(",") if row["authors"] else [],
-                        arxiv_id=row["arxiv_id"],
-                        doi=row["doi"],
-                        version=row["version"],
-                        status=DocumentStatus(row["status"]),
-                        added_date=datetime.fromisoformat(row["added_date"]),
-                        project_id=row["project_id"],
-                    )
+            documents.extend(
+                Document(
+                    doc_id=row["doc_id"],
+                    source_path=Path(row["source_path"]) if row["source_path"] else None,
+                    content_hash=row["content_hash"],
+                    title=row["title"],
+                    authors=row["authors"].split(",") if row["authors"] else [],
+                    arxiv_id=row["arxiv_id"],
+                    doi=row["doi"],
+                    version=row["version"],
+                    status=DocumentStatus(row["status"]),
+                    added_date=datetime.fromisoformat(row["added_date"]),
+                    project_id=row["project_id"],
                 )
+                for row in cursor.fetchall()
+            )
 
         return documents
 
@@ -523,22 +522,22 @@ class DocumentRegistry:
                 ORDER BY added_date DESC
             """)
 
-            for row in cursor.fetchall():
-                documents.append(
-                    Document(
-                        doc_id=row["doc_id"],
-                        source_path=Path(row["source_path"]) if row["source_path"] else None,
-                        content_hash=row["content_hash"],
-                        title=row["title"],
-                        authors=row["authors"].split(",") if row["authors"] else [],
-                        arxiv_id=row["arxiv_id"],
-                        doi=row["doi"],
-                        version=row["version"],
-                        status=DocumentStatus(row["status"]),
-                        added_date=datetime.fromisoformat(row["added_date"]),
-                        project_id=row["project_id"],
-                    )
+            documents.extend(
+                Document(
+                    doc_id=row["doc_id"],
+                    source_path=Path(row["source_path"]) if row["source_path"] else None,
+                    content_hash=row["content_hash"],
+                    title=row["title"],
+                    authors=row["authors"].split(",") if row["authors"] else [],
+                    arxiv_id=row["arxiv_id"],
+                    doi=row["doi"],
+                    version=row["version"],
+                    status=DocumentStatus(row["status"]),
+                    added_date=datetime.fromisoformat(row["added_date"]),
+                    project_id=row["project_id"],
                 )
+                for row in cursor.fetchall()
+            )
 
         return documents
 

@@ -3,7 +3,7 @@
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -83,7 +83,9 @@ class CompletePipeline:
                     "name": pdf_file.name,
                     "size_mb": round(stat.st_size / (1024 * 1024), 2),
                     "modified_time": stat.st_mtime,
-                    "modified_date": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                    "modified_date": datetime.fromtimestamp(
+                        stat.st_mtime, tz=timezone.utc
+                    ).strftime("%Y-%m-%d %H:%M:%S"),
                 })
             except Exception as e:
                 LOGGER.warning(f"Error reading {pdf_file}: {e}")
@@ -97,9 +99,11 @@ class CompletePipeline:
 
         LOGGER.info(f"Selected {len(recent_files)} most recent files:")
         if recent_files:
-            LOGGER.debug(f"   Newest: {recent_files[0]['name']} ({recent_files[0]['modified_date']})")
+            newest = recent_files[0]
+            LOGGER.debug(f"   Newest: {newest['name']} ({newest['modified_date']})")
             if len(recent_files) > 1:
-                LOGGER.debug(f"   Oldest: {recent_files[-1]['name']} ({recent_files[-1]['modified_date']})")
+                oldest = recent_files[-1]
+                LOGGER.debug(f"   Oldest: {oldest['name']} ({oldest['modified_date']})")
 
         # Calculate total size
         total_size = sum(file["size_mb"] for file in recent_files)
@@ -110,7 +114,7 @@ class CompletePipeline:
             output_path = Path(output_file)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            with open(output_path, "w") as f:
+            with output_path.open("w") as f:
                 json.dump(recent_files, f, indent=2)
 
             LOGGER.info(f"Saved file list to: {output_path}")
@@ -304,7 +308,8 @@ class CompletePipeline:
             if proc_stats["skipped"] > 0:
                 LOGGER.info(f"Skipped: {proc_stats['skipped']}")
 
-            if "statistics" in pipeline_results["steps"] and pipeline_results["steps"]["statistics"]["success"]:
+            stats_step = pipeline_results["steps"].get("statistics", {})
+            if "statistics" in pipeline_results["steps"] and stats_step["success"]:
                 stats = pipeline_results["steps"]["statistics"]["stats"]
                 LOGGER.info(f"Total chunks indexed: {stats['total_chunks_embedded']}")
 

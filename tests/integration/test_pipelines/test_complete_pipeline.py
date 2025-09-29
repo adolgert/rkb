@@ -115,7 +115,7 @@ class TestCompletePipeline:
             assert output_file.exists()
 
             # Load and verify contents
-            with open(output_file) as f:
+            with Path(output_file).open() as f:
                 saved_files = json.load(f)
 
             assert len(saved_files) == 3
@@ -281,8 +281,12 @@ class TestCompletePipeline:
             log_file = Path(f.name)
 
         try:
-            with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
-                 patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
+            with (
+                patch(
+                    "rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor
+                ),
+                patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder),
+            ):
 
                 pipeline = CompletePipeline(
                     registry=temp_db,
@@ -302,7 +306,7 @@ class TestCompletePipeline:
                 # Check that log file was created and has content
                 assert log_file.exists()
 
-                with open(log_file) as f:
+                with log_file.open() as f:
                     log_data = json.load(f)
 
                 assert "pipeline_config" in log_data
