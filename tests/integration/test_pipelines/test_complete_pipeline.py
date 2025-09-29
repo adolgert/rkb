@@ -49,7 +49,7 @@ class TestCompletePipeline:
         extractor.name = "mock_extractor"
         extractor.version = "1.0.0"
 
-        def mock_extract(source_path):
+        def mock_extract(source_path, doc_id=None):
             return ExtractionResult(
                 extractor_name="mock_extractor",
                 extractor_version="1.0.0",

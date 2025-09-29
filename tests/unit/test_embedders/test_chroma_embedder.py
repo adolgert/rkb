@@ -1,5 +1,6 @@
 """Tests for Chroma embedder."""
 
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -61,84 +62,88 @@ class TestChromaEmbedder:
 
     def test_embed_import_error(self):
         """Test embedding when ChromaDB is not installed."""
-        with patch("rkb.embedders.chroma_embedder.chromadb", side_effect=ImportError("No module")):
-            embedder = ChromaEmbedder()
-            result = embedder.embed(["test text"])
+        # Remove chromadb from sys.modules if it exists
+        chromadb_module = sys.modules.pop('chromadb', None)
 
-            assert result.embeddings == []
-            assert result.chunk_count == 0
-            assert "ChromaDB not installed" in result.error_message
+        try:
+            with patch.dict(sys.modules, {'chromadb': None}):
+                embedder = ChromaEmbedder()
+                result = embedder.embed(["test text"])
 
-    @patch("rkb.embedders.chroma_embedder.chromadb")
-    def test_embed_successful_new_collection(self, mock_chromadb):
+                assert result.embeddings == []
+                assert result.chunk_count == 0
+                assert "ChromaDB not installed" in result.error_message
+        finally:
+            # Restore chromadb module if it existed
+            if chromadb_module is not None:
+                sys.modules['chromadb'] = chromadb_module
+
+    def test_embed_successful_new_collection(self):
         """Test successful embedding with new collection."""
         # Setup mocks
+        mock_chromadb = MagicMock()
         mock_client = MagicMock()
         mock_collection = MagicMock()
         mock_chromadb.PersistentClient.return_value = mock_client
+        mock_chromadb.errors.NotFoundError = Exception  # Mock the exception type
 
         # Simulate collection not existing, then created
-        mock_client.get_collection.side_effect = ValueError("Collection not found")
+        mock_client.get_collection.side_effect = mock_chromadb.errors.NotFoundError("Collection not found")
         mock_client.create_collection.return_value = mock_collection
 
-        # Mock the get method to return embeddings
-        mock_collection.get.return_value = {
-            "embeddings": [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
-        }
-
         with tempfile.TemporaryDirectory() as temp_dir:
-            embedder = ChromaEmbedder(db_path=temp_dir)
-            result = embedder.embed(["text1", "text2"])
+            with patch.dict(sys.modules, {'chromadb': mock_chromadb}):
+                embedder = ChromaEmbedder(db_path=temp_dir)
+                result = embedder.embed(["text1", "text2"])
 
-            assert len(result.embeddings) == 2
-            assert result.embeddings[0] == [0.1, 0.2, 0.3]
-            assert result.chunk_count == 2
-            assert result.embedder_name == "chroma"
+                assert result.embeddings == []  # ChromaDB stores embeddings internally
+                assert result.chunk_count == 2
+                assert result.embedder_name == "chroma"
+                assert result.error_message is None
 
-            # Verify collection was created
-            mock_client.create_collection.assert_called_once()
+                # Verify collection was created
+                mock_client.create_collection.assert_called_once()
 
-    @patch("rkb.embedders.chroma_embedder.chromadb")
-    def test_embed_successful_existing_collection(self, mock_chromadb):
+    def test_embed_successful_existing_collection(self):
         """Test successful embedding with existing collection."""
         # Setup mocks
+        mock_chromadb = MagicMock()
         mock_client = MagicMock()
         mock_collection = MagicMock()
         mock_chromadb.PersistentClient.return_value = mock_client
+        mock_chromadb.errors.NotFoundError = Exception
 
         # Simulate collection exists
         mock_client.get_collection.return_value = mock_collection
 
-        # Mock the get method to return embeddings
-        mock_collection.get.return_value = {
-            "embeddings": [[0.1, 0.2, 0.3]]
-        }
-
         with tempfile.TemporaryDirectory() as temp_dir:
-            embedder = ChromaEmbedder(db_path=temp_dir)
-            result = embedder.embed(["text1"])
+            with patch.dict(sys.modules, {'chromadb': mock_chromadb}):
+                embedder = ChromaEmbedder(db_path=temp_dir)
+                result = embedder.embed(["text1"])
 
-            assert len(result.embeddings) == 1
-            assert result.embeddings[0] == [0.1, 0.2, 0.3]
-            assert result.chunk_count == 1
+                assert result.embeddings == []  # ChromaDB stores embeddings internally
+                assert result.chunk_count == 1
+                assert result.embedder_name == "chroma"
+                assert result.error_message is None
 
-            # Verify collection was not created (already existed)
-            mock_client.create_collection.assert_not_called()
+                # Verify collection was not created (already existed)
+                mock_client.create_collection.assert_not_called()
 
-    @patch("rkb.embedders.chroma_embedder.chromadb")
-    def test_embed_chroma_error(self, mock_chromadb):
+    def test_embed_chroma_error(self):
         """Test embedding with Chroma error."""
+        mock_chromadb = MagicMock()
         mock_client = MagicMock()
         mock_chromadb.PersistentClient.return_value = mock_client
         mock_client.get_collection.side_effect = Exception("Chroma error")
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            embedder = ChromaEmbedder(db_path=temp_dir)
-            result = embedder.embed(["test text"])
+            with patch.dict(sys.modules, {'chromadb': mock_chromadb}):
+                embedder = ChromaEmbedder(db_path=temp_dir)
+                result = embedder.embed(["test text"])
 
-            assert result.embeddings == []
-            assert result.chunk_count == 0
-            assert "Chroma error" in result.error_message
+                assert result.embeddings == []
+                assert result.chunk_count == 0
+                assert "Chroma error" in result.error_message
 
     @patch("rkb.embedders.chroma_embedder.chromadb")
     def test_embed_single_successful(self, mock_chromadb):

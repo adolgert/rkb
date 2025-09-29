@@ -104,8 +104,11 @@ class TestIngestionPipeline:
             assert doc.status == DocumentStatus.INDEXED
             assert doc.source_path == sample_pdf
 
-            # Check extraction was called
-            mock_extractor.extract.assert_called_once_with(sample_pdf)
+            # Check extraction was called with source_path and doc_id
+            assert mock_extractor.extract.call_count == 1
+            call_args = mock_extractor.extract.call_args
+            assert call_args[0][0] == sample_pdf  # source_path
+            assert len(call_args[0][1]) == 36  # doc_id is UUID (36 chars)
 
             # Check embedder was called
             assert mock_embedder.embed.called
@@ -135,10 +138,9 @@ class TestIngestionPipeline:
         with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
              patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
-            # Add document to registry first
-            doc = Document(source_path=sample_pdf, status=DocumentStatus.INDEXED)
-            doc.project_id = "test"  # Set as attribute
-            temp_db.add_document(doc)
+            # Add document to registry first using the new deduplication method
+            doc, _ = temp_db.process_new_document(sample_pdf, "test")
+            temp_db.update_document_status(doc.doc_id, DocumentStatus.INDEXED)
 
             pipeline = IngestionPipeline(
                 registry=temp_db,
@@ -251,13 +253,9 @@ class TestIngestionPipeline:
         with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
              patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
 
-            # Create a failed document in the registry
-            doc = Document(
-                source_path=sample_pdf,
-                status=DocumentStatus.FAILED,
-            )
-            doc.project_id = "test_retry"  # Set as attribute
-            temp_db.add_document(doc)
+            # Create a failed document in the registry using new deduplication method
+            doc, _ = temp_db.process_new_document(sample_pdf, "test_retry")
+            temp_db.update_document_status(doc.doc_id, DocumentStatus.FAILED)
 
             pipeline = IngestionPipeline(
                 registry=temp_db,
