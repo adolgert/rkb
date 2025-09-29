@@ -13,7 +13,7 @@ from rkb.core.text_processing import chunk_text_by_pages, extract_equations
 from rkb.embedders.base import get_embedder
 from rkb.extractors.base import get_extractor
 
-LOGGER = logging.getLogger('rkb.pipelines.ingestion_pipeline')
+LOGGER = logging.getLogger("rkb.pipelines.ingestion_pipeline")
 
 
 class IngestionPipeline:

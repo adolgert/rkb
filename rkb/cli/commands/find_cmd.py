@@ -61,7 +61,10 @@ def execute(args: argparse.Namespace) -> int:
         # Display results
         print(f"\n📄 Found {len(files)} recent PDF files:")
         for i, file_info in enumerate(files[:20], 1):
-            print(f"  {i:2d}. {file_info['name']} ({file_info['size_mb']:.1f} MB) - {file_info['modified_date']}")
+            print(
+                f"  {i:2d}. {file_info['name']} ({file_info['size_mb']:.1f} MB) - "
+                f"{file_info['modified_date']}"
+            )
 
         if len(files) > 20:
             print(f"  ... and {len(files) - 20} more files")

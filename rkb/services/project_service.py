@@ -9,7 +9,7 @@ from typing import Any
 from rkb.core.document_registry import DocumentRegistry
 from rkb.core.models import Document, DocumentStatus, ProjectStats
 
-LOGGER = logging.getLogger('rkb.services.project_service')
+LOGGER = logging.getLogger("rkb.services.project_service")
 
 
 class ProjectService:

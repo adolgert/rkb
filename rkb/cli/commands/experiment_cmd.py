@@ -150,7 +150,7 @@ def _run_experiment(service: ExperimentService, args: argparse.Namespace) -> int
 def _compare_experiments(service: ExperimentService, args: argparse.Namespace) -> int:
     """Compare experiments."""
     try:
-        comparison = service.compare_experiments(
+        service.compare_experiments(
             experiment_ids=args.experiment_ids,
             test_queries=args.queries,
             n_results=args.num_results
@@ -163,7 +163,7 @@ def _compare_experiments(service: ExperimentService, args: argparse.Namespace) -
         return 1
 
 
-def _show_summary(service: ExperimentService, args: argparse.Namespace) -> int:
+def _show_summary(service: ExperimentService, _args: argparse.Namespace) -> int:
     """Show experiment summary."""
     summary = service.get_experiment_summary()
 

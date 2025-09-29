@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Main CLI entry point for the RKB (Research Knowledge Base) system."""
 # ruff: noqa: T201
 
@@ -128,8 +127,8 @@ def main(args: list[str] | None = None) -> int:
     log_level = logging.DEBUG if parsed_args.verbose else logging.INFO
     logging.basicConfig(
         level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
     )
 
     # Route to appropriate command handler

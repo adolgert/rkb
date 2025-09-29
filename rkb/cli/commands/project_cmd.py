@@ -32,7 +32,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     # Find recent PDFs
     find_parser = subparsers.add_parser("find-pdfs", help="Find recent PDFs")
     find_parser.add_argument("--data-dir", type=Path, required=True, help="Directory to search")
-    find_parser.add_argument("--num-files", type=int, default=50, help="Number of files (default: 50)")
+    find_parser.add_argument(
+        "--num-files", type=int, default=50, help="Number of files (default: 50)"
+    )
     find_parser.add_argument("--output-file", type=Path, help="Save file list to JSON")
     find_parser.add_argument("--project-id", help="Associate with project")
 
@@ -40,7 +42,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     subset_parser = subparsers.add_parser("subset", help="Create document subset")
     subset_parser.add_argument("name", help="Subset name")
     subset_parser.add_argument("--project-id", help="Project to filter by")
-    subset_parser.add_argument("--status", choices=["pending", "extracting", "extracted", "indexing", "indexed", "failed"], help="Filter by status")
+    subset_parser.add_argument(
+        "--status",
+        choices=["pending", "extracting", "extracted", "indexing", "indexed", "failed"],
+        help="Filter by status"
+    )
     subset_parser.add_argument("--date-from", help="Filter by date (YYYY-MM-DD)")
     subset_parser.add_argument("--date-to", help="Filter by date (YYYY-MM-DD)")
     subset_parser.add_argument("--filename-pattern", help="Filter by filename pattern")
@@ -50,7 +56,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     export_parser = subparsers.add_parser("export", help="Export project data")
     export_parser.add_argument("project_id", help="Project ID")
     export_parser.add_argument("--output-file", type=Path, required=True, help="Output JSON file")
-    export_parser.add_argument("--include-content", action="store_true", help="Include extracted content")
+    export_parser.add_argument(
+        "--include-content", action="store_true", help="Include extracted content"
+    )
 
     # Global options
     parser.add_argument(
@@ -106,7 +114,7 @@ def _create_project(service: ProjectService, args: argparse.Namespace) -> int:
     return 0
 
 
-def _list_projects(service: ProjectService, args: argparse.Namespace) -> int:
+def _list_projects(service: ProjectService, _args: argparse.Namespace) -> int:
     """List all projects."""
     projects = service.list_projects()
 

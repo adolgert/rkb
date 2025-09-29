@@ -10,7 +10,7 @@ from rkb.core.document_registry import DocumentRegistry
 from rkb.core.models import ComparisonResult, ExperimentConfig, SearchResult
 from rkb.services.search_service import SearchService
 
-LOGGER = logging.getLogger('rkb.services.experiment_service')
+LOGGER = logging.getLogger("rkb.services.experiment_service")
 
 
 class ExperimentService:

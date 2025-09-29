@@ -106,9 +106,9 @@ class TestExperimentService:
         service = ExperimentService(registry=temp_db)
 
         # Create multiple experiments
-        exp1 = service.create_experiment("Experiment 1", project_id="project_a")
-        exp2 = service.create_experiment("Experiment 2", project_id="project_b")
-        exp3 = service.create_experiment("Experiment 3", project_id="project_a")
+        service.create_experiment("Experiment 1", project_id="project_a")
+        service.create_experiment("Experiment 2", project_id="project_b")
+        service.create_experiment("Experiment 3", project_id="project_a")
 
         # List all experiments
         all_experiments = service.list_experiments()
@@ -346,7 +346,7 @@ class TestExperimentService:
 
             # Verify content
             import json
-            with open(output_file) as f:
+            with output_file.open() as f:
                 data = json.load(f)
 
             assert data["experiment_id"] == experiment.experiment_id

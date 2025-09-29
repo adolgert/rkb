@@ -77,7 +77,9 @@ class TestIngestionPipelineDeduplication:
         for file_path in files.values():
             file_path.unlink()
 
-    def test_process_single_document_new_file(self, temp_registry, mock_extractor, mock_embedder, sample_files):
+    def test_process_single_document_new_file(
+        self, temp_registry, mock_extractor, mock_embedder, sample_files
+    ):
         """Test processing a new document."""
         with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
              patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
@@ -100,7 +102,9 @@ class TestIngestionPipelineDeduplication:
             assert len(call_args[0]) == 2  # source_path and doc_id
             assert len(call_args[0][1]) == 36  # doc_id is UUID
 
-    def test_process_single_document_duplicate_content(self, temp_registry, mock_extractor, mock_embedder, sample_files):
+    def test_process_single_document_duplicate_content(
+        self, temp_registry, mock_extractor, mock_embedder, sample_files
+    ):
         """Test processing duplicate content."""
         with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
              patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
@@ -127,7 +131,9 @@ class TestIngestionPipelineDeduplication:
             # Extractor should only be called once (for the first file)
             assert mock_extractor.extract.call_count == 1
 
-    def test_process_single_document_different_content(self, temp_registry, mock_extractor, mock_embedder, sample_files):
+    def test_process_single_document_different_content(
+        self, temp_registry, mock_extractor, mock_embedder, sample_files
+    ):
         """Test processing files with different content."""
         with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
              patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
@@ -152,7 +158,9 @@ class TestIngestionPipelineDeduplication:
             # Extractor should be called twice
             assert mock_extractor.extract.call_count == 2
 
-    def test_process_single_document_force_reprocess_duplicate(self, temp_registry, mock_extractor, mock_embedder, sample_files):
+    def test_process_single_document_force_reprocess_duplicate(
+        self, temp_registry, mock_extractor, mock_embedder, sample_files
+    ):
         """Test force reprocessing of duplicate content."""
         with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
              patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
@@ -178,7 +186,9 @@ class TestIngestionPipelineDeduplication:
             # Extractor should be called twice due to force_reprocess
             assert mock_extractor.extract.call_count == 2
 
-    def test_process_single_document_doc_id_passed_to_extractor(self, temp_registry, mock_extractor, mock_embedder, sample_files):
+    def test_process_single_document_doc_id_passed_to_extractor(
+        self, temp_registry, mock_extractor, mock_embedder, sample_files
+    ):
         """Test that doc_id is correctly passed to extractor."""
         with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
              patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):

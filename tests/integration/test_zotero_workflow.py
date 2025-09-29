@@ -149,7 +149,9 @@ class TestZoteroWorkflow:
         assert identity.source_type == "zotero"
         assert identity.zotero_id == "ABC123"
 
-    def test_full_pipeline_with_zotero_structure(self, zotero_structure, temp_registry, mock_extractor, mock_embedder):
+    def test_full_pipeline_with_zotero_structure(
+        self, zotero_structure, temp_registry, mock_extractor, mock_embedder
+    ):
         """Test full pipeline with Zotero-like directory structure."""
         with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
              patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):
@@ -181,7 +183,9 @@ class TestZoteroWorkflow:
             for result in results:
                 assert "doc_id" in result
 
-    def test_extraction_paths_use_doc_id(self, zotero_structure, temp_registry, mock_extractor, mock_embedder):
+    def test_extraction_paths_use_doc_id(
+        self, zotero_structure, temp_registry, mock_extractor, mock_embedder
+    ):
         """Test that extraction paths use doc_id instead of filename."""
         with patch("rkb.pipelines.ingestion_pipeline.get_extractor", return_value=mock_extractor), \
              patch("rkb.pipelines.ingestion_pipeline.get_embedder", return_value=mock_embedder):

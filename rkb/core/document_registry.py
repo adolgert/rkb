@@ -117,7 +117,7 @@ class DocumentRegistry:
                     ),
                 )
                 return True
-        except sqlite3.IntegrityError as e:
+        except sqlite3.IntegrityError:
             # Handle case where doc_id already exists (should be rare with UUIDs)
             LOGGER.exception("Document ID collision")
             return False
@@ -236,7 +236,7 @@ class DocumentRegistry:
                         embedding.doc_id,
                         getattr(embedding, "extraction_id", None),
                         embedding.embedder_name,
-                        "1.0.0",  # Default version since EmbeddingResult doesn't have embedder_version
+                        "1.0.0",  # Default version since EmbeddingResult doesn't have version
                         str(embedding.vector_db_path) if embedding.vector_db_path else None,
                         embedding.chunk_count,
                         embedding.indexed_date.isoformat()

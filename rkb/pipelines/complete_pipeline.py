@@ -11,7 +11,7 @@ from rkb.core.document_registry import DocumentRegistry
 from rkb.core.models import DocumentStatus
 from rkb.pipelines.ingestion_pipeline import IngestionPipeline
 
-LOGGER = logging.getLogger('rkb.pipelines.complete_pipeline')
+LOGGER = logging.getLogger("rkb.pipelines.complete_pipeline")
 
 
 class CompletePipeline:
