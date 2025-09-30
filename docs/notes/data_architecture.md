@@ -1,170 +1,132 @@
-Current Data Architecture Analysis
+Data Architecture: Project-Based Design
 
   Data Flow Pipeline
 
   1. Source PDFs (data/initial/)
      ↓
-  2. Discovery & Metadata (find_recent.py → recent_pdfs.json)
+  2. Project Creation (projects/{project_name}/)
      ↓
-  3. Text Extraction (extract.py/robust_extract.py → extracted/*.mmd)
+  3. Text Extraction → extractions.db (per project)
      ↓
-  4. Chunking & Embedding (index.py → chroma_db/)
+  4. Experiment Creation (projects/{project}/experiments/{exp_name}/)
      ↓
-  5. Search Interface (search.py)
+  5. Chunking & Embedding → experiment.db + chroma_db/ (per experiment)
+     ↓
+  6. Search Interface (search.py)
 
   Storage Layers
 
   1. Source Layer (data/initial/)
     - Raw PDF files
-    - No versioning or deduplication
+    - Read-only, never modified
     - Metadata: filename, size, modification time
-  2. Extraction Layer (extractions/documents/{doc_id}/)  # ✅ UPDATED
-    - UUID-based directory structure for organization
-    - extracted.mmd files from Nougat OCR
-    - metadata.json for document metadata
-    - ✅ Content hashing and duplicate detection implemented
-    - ✅ PathResolver for consistent path management
-  3. Index Layer (rkb_chroma_db/)
-    - Vector embeddings in Chroma
-    - SQLite metadata + binary vector storage
-    - ✅ Enhanced chunk-level granularity with doc_id traceability
+
+  2. Project Layer (projects/{project_name}/)
+    - Self-contained extraction database (extractions.db)
+    - Documents table: doc_id, content_hash, source_path, metadata
+    - Extractions table: extraction_id, doc_id, content (markdown), page_count
+    - Tied to specific extractor version (e.g., nougat:0.1.17)
+    - Immutable once created (upgrading extractor = new project)
+    - Config file (config.yaml) with extractor version and settings
+
+  3. Experiment Layer (projects/{project}/experiments/{exp_name}/)
+    - Experiment-specific database (experiment.db)
+    - Chunks table: chunk_id, extraction_id, content, page_numbers
+    - Config table: chunking and embedding parameters
+    - Vector database (chroma_db/) with embeddings
+    - Ephemeral: can be deleted and rebuilt from project extractions
 
   Metadata Structures
 
-  File Discovery (recent_pdfs.json):
+  Project Config (projects/{project}/config.yaml):
   {
-    "path": "data/initial/file.pdf",
-    "name": "file.pdf",
-    "size_mb": 1.23,
-    "modified_time": 1759008276,
-    "modified_date": "2025-09-27 17:24:36"
+    "project_name": "Nougat v1 Extraction",
+    "extractor": {
+      "name": "nougat",
+      "version": "0.1.17"
+    },
+    "created_date": "2025-09-29T10:00:00Z",
+    "description": "Initial extraction with Nougat v0.1.17"
   }
 
-  Extraction Logs (extraction_log.json):
+  Document Metadata (in extractions.db):
   {
-    "status": "success/error/skipped",
-    "pdf_path": "source path",
-    "output_path": "extracted path",
-    "message": "status details"
+    "doc_id": "uuid",
+    "content_hash": "sha256",
+    "source_path": "/path/to/file.pdf",
+    "arxiv_id": "2506.06542",
+    "doi": "10.1234/example",
+    "title": "extracted_title",
+    "authors": ["Author 1", "Author 2"],
+    "added_date": "ISO timestamp"
   }
 
-  Chunk Metadata (in Chroma):
+  Chunk Metadata (in experiments/{exp_name}/experiment.db):
   {
-    "source_file": "extracted.mmd",  # UUID-based path
-    "pdf_name": "original_filename.pdf",
-    "doc_id": "document_uuid",  # ✅ IMPLEMENTED - proper document lineage
+    "chunk_id": "uuid",
+    "extraction_id": "parent_extraction_uuid",
+    "doc_id": "document_uuid",
+    "content": "chunk text content",
+    "page_numbers": [3, 4],  # ✅ CRITICAL - must be tracked
     "chunk_index": 0,
     "chunk_length": 1500,
     "has_equations": true,
     "display_eq_count": 2,
     "inline_eq_count": 5,
-    "processed_date": "ISO timestamp",
-    "content_hash": "sha256_hash",  # ✅ IMPLEMENTED - content deduplication
-    "source_type": "zotero",  # ✅ IMPLEMENTED - source detection
-    "zotero_id": "ABC123"  # ✅ IMPLEMENTED - Zotero reference
+    "created_date": "ISO timestamp"
   }
 
-  Architecture Improvements (2025-09-29)
+  Architecture Design (2025-09-29 Update)
+
+  ✅ Project-Based Isolation
+    - Each project is self-contained directory
+    - Tied to specific extractor version
+    - Upgrading extractor = create new project
+    - No versioning complexity within single database
+
+  ✅ Experiment Flexibility
+    - Multiple experiments per project
+    - Each experiment has own chunking/embedding params
+    - Experiments are ephemeral (can delete and rebuild)
+    - Project extractions are immutable (expensive to recreate)
 
   ✅ Content-Based Identification (IMPLEMENTED)
     - SHA-256 content hashing for deduplication
     - DocumentIdentity class for centralized identity management
-    - Automatic duplicate detection and linking
+    - Automatic duplicate detection within each project
     - Support for multiple source paths referencing same content
 
-  ✅ Enhanced Document Traceability (IMPLEMENTED)
-    - UUID-based document storage (doc_id)
-    - PathResolver for consistent extraction organization
-    - Direct linkage from chunks to original documents
-    - Proper document lineage preservation
+  ✅ Simplified Operations
+    - Delete project: `rm -rf projects/{project_name}/`
+    - Delete experiment: `rm -rf projects/{project}/experiments/{exp_name}/`
+    - No cascade deletion logic needed
+    - File system provides referential integrity
 
-  ✅ Zotero Storage Support (IMPLEMENTED)
-    - Read-only access to ~/Zotero/storage structure
-    - Handles 6000+ files with duplicate filenames
-    - Source type detection (zotero/dropbox/local)
-    - Zotero ID extraction for traceability
+  How Architecture Handles Updates
 
-  ✅ Database Schema Updates (IMPLEMENTED)
-    - Removed UNIQUE constraint on source_path
-    - Enhanced DocumentRegistry with content hash methods
-    - Support for multiple source references per document
-    - Proper deduplication logic in process_new_document()
+  1. Upgrading Extractor Version:
+    - Old project (projects/nougat_v1/) remains unchanged
+    - Create new project directory (projects/nougat_v2/)
+    - Run extraction pipeline on all PDFs into new project
+    - Old project stays searchable during week-long re-extraction
+    - When ready: switch default project, optionally delete old one
 
-  Remaining Gaps
-  1. Limited Metadata Enhancement
-    - Paper metadata extraction (title, authors, DOI, ArXiv ID)
-    - Extraction quality metrics
-    - Inter-document relationships
-  2. Advanced Version Management
-    - Document replacement workflows
-    - Deletion cascade operations
-    - Transaction/rollback capability
-  3. Multiple Source References
-    - Track all source paths that reference same document
-    - Source synchronization monitoring
+  2. Experimenting with Chunking:
+    - Within existing project, create new experiment
+    - Example: projects/nougat_v1/experiments/large_chunks/
+    - Rebuild chunks from existing extractions (fast, minutes not hours)
+    - Compare experiments side-by-side
+    - Delete failed experiments: rm -rf experiments/failed_exp/
 
-● How Architecture Would Handle Updates
+  3. Deleting Documents:
+    - Remove from project's extractions.db
+    - Experiments automatically exclude deleted docs
+    - Or: start fresh project without unwanted documents
 
-  Current Behavior for Duplicate/Version Replacement:
-
-  1. Adding duplicate documents:
-    - Both files coexist in data/initial/
-    - Both get extracted to separate .mmd files
-    - Both get indexed, creating duplicate chunks
-    - Search returns results from both versions
-    - No content-based deduplication mechanism
-  2. Replacing a PDF:
-    - Old extraction remains in extracted/
-    - Old chunks remain in Chroma database
-    - New file creates additional chunks
-    - No cascade deletion mechanism
-  3. Deleting a PDF:
-    - Source file removed from data/initial/
-    - Extracted .mmd remains orphaned
-    - Chunks remain searchable in Chroma
-    - No referential integrity
-
-  Recommended Architecture Improvements
-
-  To support proper versioning and deduplication:
-
-  1. Document Registry (SQLite/JSON):
-  {
-    "doc_id": "uuid",
-    "content_hash": "sha256",
-    "arxiv_id": "2506.06542",
-    "version": 3,
-    "title": "extracted_title",
-    "authors": ["list"],
-    "source_path": "current_pdf_path",
-    "extracted_path": "mmd_path",
-    "chunk_ids": ["chunk_1", "chunk_2"],
-    "added_date": "timestamp",
-    "updated_date": "timestamp"
-  }
-  2. Content-Based Operations:
-    - Hash PDFs on ingestion
-    - Detect duplicates before extraction
-    - Track ArXiv IDs for paper identification
-    - Link all derivatives to document ID
-  3. Cascade Operations:
-    - Delete document → remove extraction → delete chunks
-    - Update document → re-extract → replace chunks
-    - Archive old versions instead of overwriting
-  4. Enhanced Chunk Metadata:
-  {
-    "doc_id": "parent_document_uuid",
-    "page_numbers": [3, 4],  # Original PDF pages
-    "section_hierarchy": ["2. Methods", "2.1 Algorithm"],
-    "extraction_quality": 0.95,
-    "version": 2
-  }
-
-  This architecture would enable:
-  - Automatic deduplication
-  - Clean updates/deletions
-  - Document-level search results
-  - Provenance tracking from search result to source PDF
+  4. Adding New Documents:
+    - Extract into existing project
+    - All experiments within project can access new extractions
+    - Rebuild experiments to include new documents
 
 ## ✅ Implemented Components (2025-09-29)
 
