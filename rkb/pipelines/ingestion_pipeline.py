@@ -125,13 +125,15 @@ class IngestionPipeline:
                 # Extract equations
                 equation_info = extract_equations(extraction_result.content)
 
-                # Chunk the text
-                chunks = chunk_text_by_pages(extraction_result.content, max_chunk_size)
-                LOGGER.debug(f"  Created {len(chunks)} chunks")
+                # Chunk the text (returns tuples of (chunk_text, page_numbers))
+                chunks_with_pages = chunk_text_by_pages(extraction_result.content, max_chunk_size)
+                LOGGER.debug(f"  Created {len(chunks_with_pages)} chunks")
 
-                if chunks and not self.skip_embedding:
+                if chunks_with_pages and not self.skip_embedding:
+                    # Extract just the text for embedding
+                    chunk_texts = [chunk for chunk, _ in chunks_with_pages]
                     # Generate embeddings only if not skipping
-                    valid_chunks = [chunk for chunk in chunks if len(chunk.strip()) >= 50]
+                    valid_chunks = [chunk for chunk in chunk_texts if len(chunk.strip()) >= 50]
 
                     if valid_chunks:
                         embedding_result = self.embedder.embed(valid_chunks)
@@ -158,10 +160,11 @@ class IngestionPipeline:
             LOGGER.info(f"  Completed in {processing_time:.1f}s")
 
             # Calculate chunk information
-            chunk_count = len(chunks) if extraction_result.content else 0
+            chunk_count = len(chunks_with_pages) if extraction_result.content else 0
             valid_chunk_count = 0
-            if extraction_result.content and chunks and not self.skip_embedding:
-                valid_chunks = [chunk for chunk in chunks if len(chunk.strip()) >= 50]
+            if extraction_result.content and chunks_with_pages and not self.skip_embedding:
+                chunk_texts = [chunk for chunk, _ in chunks_with_pages]
+                valid_chunks = [chunk for chunk in chunk_texts if len(chunk.strip()) >= 50]
                 valid_chunk_count = len(valid_chunks)
 
             return {

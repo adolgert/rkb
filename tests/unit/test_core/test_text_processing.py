@@ -63,7 +63,7 @@ class TestExtractEquations:
 
 
 class TestChunkTextByPages:
-    """Tests for text chunking."""
+    """Tests for text chunking with page number tracking."""
 
     def test_chunk_small_text(self):
         """Test chunking text smaller than max size."""
@@ -71,7 +71,9 @@ class TestChunkTextByPages:
         chunks = chunk_text_by_pages(text, max_chunk_size=1000)
 
         assert len(chunks) == 1
-        assert chunks[0] == text
+        chunk_text, page_numbers = chunks[0]
+        assert chunk_text == text
+        assert page_numbers == [1]  # Default to page 1 if no markers
 
     def test_chunk_large_text(self):
         """Test chunking text larger than max size."""
@@ -80,8 +82,10 @@ class TestChunkTextByPages:
         chunks = chunk_text_by_pages(text, max_chunk_size=200)
 
         assert len(chunks) > 1
-        for chunk in chunks:
-            assert len(chunk) <= 250  # Allow some flexibility
+        for chunk_text, page_numbers in chunks:
+            assert len(chunk_text) <= 250  # Allow some flexibility
+            assert isinstance(page_numbers, list)
+            assert all(isinstance(p, int) for p in page_numbers)
 
     def test_chunk_empty_text(self):
         """Test chunking empty text."""
@@ -95,18 +99,63 @@ class TestChunkTextByPages:
         chunks = chunk_text_by_pages(text, max_chunk_size=1000)
 
         assert len(chunks) == 1
-        assert "\n\n" in chunks[0]
+        chunk_text, _page_numbers = chunks[0]
+        assert "\n\n" in chunk_text
+
+    def test_chunk_with_nougat_page_markers(self):
+        """Test chunking with Nougat page markers."""
+        text = """<!-- Pages 1-3 -->
+
+First section content here.
+
+More content on first pages.
+
+<!-- Pages 4-6 -->
+
+Second section content here.
+
+More content on later pages."""
+
+        chunks = chunk_text_by_pages(text, max_chunk_size=100)
+
+        # Should have multiple chunks
+        assert len(chunks) >= 2
+
+        # Check that page numbers are extracted
+        for _chunk_text, page_numbers in chunks:
+            assert len(page_numbers) > 0
+            assert all(1 <= p <= 6 for p in page_numbers)
+
+    def test_chunk_page_number_ranges(self):
+        """Test that page numbers correctly span ranges."""
+        text = """<!-- Pages 1-2 -->
+
+Content for pages 1-2.
+
+<!-- Pages 3-4 -->
+
+Content for pages 3-4."""
+
+        chunks = chunk_text_by_pages(text, max_chunk_size=50)
+
+        all_pages = set()
+        for _, page_numbers in chunks:
+            all_pages.update(page_numbers)
+
+        # Should cover pages 1-4
+        assert 1 in all_pages or 2 in all_pages
+        assert 3 in all_pages or 4 in all_pages
 
 
 class TestCreateChunkMetadata:
     """Tests for chunk metadata creation."""
 
     def test_create_metadata_for_chunks(self):
-        """Test creating metadata for text chunks."""
+        """Test creating metadata for text chunks with page numbers."""
         chunks = [
-            "Regular text without equations.",
-            r"Text with inline equation $E = mc^2$ here.",
-            r"Text with display equation: \[\int f(x) dx\] and more.",
+            ("Regular text without equations.", [1]),
+            (r"Text with inline equation $E = mc^2$ here.", [2]),
+            (r"Text with display equation: \[\int f(x) dx\] and more.", [3]),
         ]
 
         metadata_list = create_chunk_metadata(chunks)
@@ -119,24 +168,42 @@ class TestCreateChunkMetadata:
         assert metadata_list[0].has_equations is False
         assert metadata_list[0].display_eq_count == 0
         assert metadata_list[0].inline_eq_count == 0
+        assert metadata_list[0].page_numbers == [1]
 
         # Check second chunk (inline equation)
         assert metadata_list[1].chunk_index == 1
         assert metadata_list[1].has_equations is True
         assert metadata_list[1].inline_eq_count == 1
+        assert metadata_list[1].page_numbers == [2]
 
         # Check third chunk (display equation)
         assert metadata_list[2].chunk_index == 2
         assert metadata_list[2].has_equations is True
         assert metadata_list[2].display_eq_count == 1
+        assert metadata_list[2].page_numbers == [3]
 
     def test_create_metadata_with_offset(self):
         """Test creating metadata with index offset."""
-        chunks = ["First chunk", "Second chunk"]
+        chunks = [("First chunk", [1]), ("Second chunk", [1, 2])]
         metadata_list = create_chunk_metadata(chunks, chunk_index_offset=10)
 
         assert metadata_list[0].chunk_index == 10
         assert metadata_list[1].chunk_index == 11
+
+    def test_create_metadata_with_page_ranges(self):
+        """Test creating metadata with chunks spanning multiple pages."""
+        chunks = [
+            ("Content on pages 1-2", [1, 2]),
+            ("Content on pages 2-3", [2, 3]),
+            ("Content on page 4", [4]),
+        ]
+
+        metadata_list = create_chunk_metadata(chunks)
+
+        assert len(metadata_list) == 3
+        assert metadata_list[0].page_numbers == [1, 2]
+        assert metadata_list[1].page_numbers == [2, 3]
+        assert metadata_list[2].page_numbers == [4]
 
 
 class TestHashFile:

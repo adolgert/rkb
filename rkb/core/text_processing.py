@@ -30,27 +30,69 @@ def extract_equations(text: str) -> dict[str, any]:
     }
 
 
-def chunk_text_by_pages(content: str, max_chunk_size: int = 2000) -> list[str]:
-    """Split markdown content into page-based chunks.
+def chunk_text_by_pages(content: str, max_chunk_size: int = 2000) -> list[tuple[str, list[int]]]:
+    """Split markdown content into page-based chunks with page tracking.
+
+    Extracts page numbers from Nougat's <!-- Pages X-Y --> markers and tracks
+    which pages each chunk spans.
 
     Args:
-        content: Text content to chunk
+        content: Text content to chunk (from Nougat extraction)
         max_chunk_size: Maximum size per chunk in characters
 
     Returns:
-        List of text chunks
+        List of (chunk_text, page_numbers) tuples
     """
-    # Split by pages if we can identify page boundaries
-    # For now, use simple paragraph-based chunking
+    # Extract page boundaries from Nougat markers
+    page_markers = []
+    for match in re.finditer(r"<!-- Pages (\d+)-(\d+) -->", content):
+        start_page = int(match.group(1))
+        end_page = int(match.group(2))
+        marker_pos = match.start()
+        page_markers.append((marker_pos, start_page, end_page))
+
+    # Build character position to page number mapping
+    def get_page_at_position(pos: int) -> int:
+        """Get page number at given character position."""
+        for i, (marker_pos, start_page, end_page) in enumerate(page_markers):
+            # Find which page range this position falls into
+            next_marker_pos = page_markers[i + 1][0] if i + 1 < len(page_markers) else len(content)
+            if marker_pos <= pos < next_marker_pos:
+                # Estimate page within range based on position
+                if end_page == start_page:
+                    return start_page
+                range_size = next_marker_pos - marker_pos
+                offset = pos - marker_pos
+                page_offset = int((end_page - start_page + 1) * (offset / range_size))
+                return min(start_page + page_offset, end_page)
+        return 1  # Default to page 1 if no markers found
+
+    # Split by paragraphs
     paragraphs = content.split("\n\n")
 
     chunks = []
     current_chunk = ""
+    current_start_pos = 0
 
     for paragraph in paragraphs:
         # If adding this paragraph would exceed max size, save current chunk
         if len(current_chunk) + len(paragraph) > max_chunk_size and current_chunk:
-            chunks.append(current_chunk.strip())
+            # Calculate page numbers for this chunk
+            chunk_pages = set()
+            if page_markers:
+                # Sample positions throughout the chunk
+                chunk_len = len(current_chunk)
+                sample_positions = [
+                    current_start_pos + int(chunk_len * i / 10)
+                    for i in range(11)
+                ]
+                for pos in sample_positions:
+                    chunk_pages.add(get_page_at_position(pos))
+            else:
+                chunk_pages.add(1)
+
+            chunks.append((current_chunk.strip(), sorted(chunk_pages)))
+            current_start_pos += len(current_chunk) + 2  # +2 for "\n\n"
             current_chunk = paragraph
         elif current_chunk:
             current_chunk += "\n\n" + paragraph
@@ -59,16 +101,31 @@ def chunk_text_by_pages(content: str, max_chunk_size: int = 2000) -> list[str]:
 
     # Add the last chunk
     if current_chunk.strip():
-        chunks.append(current_chunk.strip())
+        chunk_pages = set()
+        if page_markers:
+            chunk_len = len(current_chunk)
+            sample_positions = [
+                current_start_pos + int(chunk_len * i / 10)
+                for i in range(11)
+            ]
+            for pos in sample_positions:
+                chunk_pages.add(get_page_at_position(pos))
+        else:
+            chunk_pages.add(1)
+
+        chunks.append((current_chunk.strip(), sorted(chunk_pages)))
 
     return chunks
 
 
-def create_chunk_metadata(chunks: list[str], chunk_index_offset: int = 0) -> list[ChunkMetadata]:
-    """Create metadata for text chunks.
+def create_chunk_metadata(
+    chunks: list[tuple[str, list[int]]],
+    chunk_index_offset: int = 0
+) -> list[ChunkMetadata]:
+    """Create metadata for text chunks with page numbers.
 
     Args:
-        chunks: List of text chunks
+        chunks: List of (chunk_text, page_numbers) tuples
         chunk_index_offset: Starting index for chunk numbering
 
     Returns:
@@ -76,7 +133,7 @@ def create_chunk_metadata(chunks: list[str], chunk_index_offset: int = 0) -> lis
     """
     metadata_list = []
 
-    for i, chunk in enumerate(chunks):
+    for i, (chunk, page_numbers) in enumerate(chunks):
         equation_info = extract_equations(chunk)
         metadata = ChunkMetadata(
             chunk_index=i + chunk_index_offset,
@@ -84,6 +141,7 @@ def create_chunk_metadata(chunks: list[str], chunk_index_offset: int = 0) -> lis
             has_equations=equation_info["has_equations"],
             display_eq_count=len(equation_info["display_equations"]),
             inline_eq_count=len(equation_info["inline_equations"]),
+            page_numbers=page_numbers,
         )
         metadata_list.append(metadata)
 
