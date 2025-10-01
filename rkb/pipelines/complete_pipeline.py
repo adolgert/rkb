@@ -23,6 +23,7 @@ class CompletePipeline:
         extractor_name: str = "nougat",
         embedder_name: str = "chroma",
         project_id: str | None = None,
+        checkpoint_dir: Path | None = None,
     ):
         """Initialize complete pipeline.
 
@@ -31,6 +32,7 @@ class CompletePipeline:
             extractor_name: Name of extractor to use
             embedder_name: Name of embedder to use
             project_id: Project identifier for document organization
+            checkpoint_dir: Directory for checkpoint files (default: .checkpoints)
         """
         self.registry = registry or DocumentRegistry()
         self.project_id = project_id or f"project_{int(time.time())}"
@@ -41,6 +43,7 @@ class CompletePipeline:
             extractor_name=extractor_name,
             embedder_name=embedder_name,
             project_id=self.project_id,
+            checkpoint_dir=checkpoint_dir,
         )
 
     def find_recent_pdfs(
@@ -130,6 +133,7 @@ class CompletePipeline:
         force_reprocess: bool = False,
         test_mode: bool = True,
         log_file: str | Path | None = None,
+        resume: bool = True,
     ) -> dict[str, Any]:
         """Run the complete PDF processing pipeline.
 
@@ -141,6 +145,7 @@ class CompletePipeline:
             force_reprocess: Whether to reprocess existing documents
             test_mode: Whether to run in test mode with reduced processing
             log_file: Optional path to save processing log
+            resume: Whether to resume from checkpoint if available
 
         Returns:
             Dictionary with pipeline results and statistics
@@ -210,6 +215,7 @@ class CompletePipeline:
                     force_reprocess=force_reprocess,
                     max_chunk_size=max_chunk_size,
                     log_file=log_file,
+                    resume=resume,
                 )
 
                 # Count successes and failures
@@ -469,7 +475,8 @@ class CompletePipeline:
         pdf_list = [str(path) for path in pdf_paths]
         results = self.ingestion_pipeline.process_batch(
             pdf_list=pdf_list,
-            force_reprocess=force_reprocess
+            force_reprocess=force_reprocess,
+            resume=True,  # Always allow resume for document processing
         )
 
         # Count results
