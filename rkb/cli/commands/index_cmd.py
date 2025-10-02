@@ -55,6 +55,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Show what would be indexed without actually indexing"
     )
 
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=Path,
+        help="Directory for checkpoint files (default: .checkpoints)"
+    )
+
 
 def execute(args: argparse.Namespace) -> int:
     """Execute the index command."""
@@ -97,12 +103,20 @@ def execute(args: argparse.Namespace) -> int:
                 print(f"  ... and {len(documents) - 10} more documents")
             return 0
 
+        # Determine checkpoint directory
+        checkpoint_dir = (
+            args.checkpoint_dir
+            if hasattr(args, "checkpoint_dir") and args.checkpoint_dir
+            else None
+        )
+
         # Initialize pipeline for embedding
         pipeline = CompletePipeline(
             registry=registry,
             extractor_name="nougat",  # Not used for indexing-only
             embedder_name=args.embedder,
-            project_id=args.project_id
+            project_id=args.project_id,
+            checkpoint_dir=checkpoint_dir
         )
 
         # Extract paths for indexing

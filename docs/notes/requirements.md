@@ -120,10 +120,11 @@ This document defines the functional and non-functional requirements for a perso
 - Efficient storage (avoid duplicate extractions)
 
 **Updates and Deletion**
-- Cascade deletion (PDF → extraction → embeddings → search index)
-- Archive old versions rather than destructive updates
-- Support for manual document corrections
-- Rollback capability for failed updates
+- Cascade deletion at project level (delete project directory removes all experiments)
+- Cascade deletion at experiment level (delete experiment, extractions untouched)
+- Extractor upgrades: create new project, preserve old project for comparison
+- Archive old projects rather than destructive updates
+- Rollback capability: switch back to previous project directory
 
 ### 2.2 Deduplication Strategy
 
@@ -142,11 +143,12 @@ This document defines the functional and non-functional requirements for a perso
 ### 2.3 Version Control
 
 **Document Provenance**
-- Track all processing steps and timestamps
-- Record extraction tool versions and parameters
-- Maintain audit log of all changes
-- Support reproducible processing
-- Quality metrics at each processing stage
+- Track all processing steps within project metadata
+- Each project tied to specific extractor version
+- Each experiment tracks chunking and embedding parameters
+- Maintain audit log via project/experiment directory structure
+- Support reproducible processing via config files
+- Quality metrics stored in experiment results
 
 ### 2.4 Metadata Management
 
@@ -300,10 +302,11 @@ This document defines the functional and non-functional requirements for a perso
 - External data source connectors
 
 **Configuration Management**
-- Experiment isolation and comparison
-- A/B testing capabilities
-- Feature flags for experimental features
-- Environment-specific configurations
+- Project-level config: extractor version, source paths
+- Experiment-level config: chunking params, embedding model
+- Experiment isolation by directory structure
+- A/B testing: create multiple experiments within same project
+- Environment-specific configurations via project selection
 
 **API Design**
 - RESTful service interfaces

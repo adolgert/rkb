@@ -43,6 +43,25 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
+        "--resume",
+        action="store_true",
+        default=True,
+        help="Resume from checkpoint if available (default: True)"
+    )
+
+    parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Do not resume from checkpoint"
+    )
+
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=Path,
+        help="Directory for checkpoint files (default: .checkpoints)"
+    )
+
+    parser.add_argument(
         "--db-path",
         type=Path,
         default="rkb_documents.db",
@@ -71,19 +90,32 @@ def execute(args: argparse.Namespace) -> int:
 
         # Initialize services
         registry = DocumentRegistry(args.db_path)
+
+        # Determine checkpoint directory
+        checkpoint_dir = (
+            args.checkpoint_dir
+            if hasattr(args, "checkpoint_dir") and args.checkpoint_dir
+            else None
+        )
+
         pipeline = IngestionPipeline(
             registry=registry,
             extractor_name=args.extractor,
             project_id=args.project_id,
-            skip_embedding=True  # Only extract, don't embed
+            skip_embedding=True,  # Only extract, don't embed
+            checkpoint_dir=checkpoint_dir
         )
+
+        # Determine resume flag
+        resume = not args.no_resume if hasattr(args, "no_resume") else True
 
         # Process files
         pdf_list = [str(path) for path in pdf_files]
         results = pipeline.process_batch(
             pdf_list=pdf_list,
             max_files=len(pdf_files),
-            force_reprocess=args.force_reprocess
+            force_reprocess=args.force_reprocess,
+            resume=resume
         )
 
         # Display results

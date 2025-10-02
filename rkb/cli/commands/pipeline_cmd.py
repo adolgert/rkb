@@ -86,6 +86,25 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Show what would be processed without actually processing"
     )
 
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        default=True,
+        help="Resume from checkpoint if available (default: True)"
+    )
+
+    parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Do not resume from checkpoint"
+    )
+
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=Path,
+        help="Directory for checkpoint files (default: .checkpoints)"
+    )
+
 
 def execute(args: argparse.Namespace) -> int:
     """Execute the pipeline command."""
@@ -157,12 +176,23 @@ def execute(args: argparse.Namespace) -> int:
         # Step 2: Initialize and run pipeline
         print("🔄 Step 2: Running processing pipeline...")
 
+        # Determine checkpoint directory
+        checkpoint_dir = (
+            args.checkpoint_dir
+            if hasattr(args, "checkpoint_dir") and args.checkpoint_dir
+            else None
+        )
+
         pipeline = CompletePipeline(
             registry=registry,
             extractor_name=args.extractor,
             embedder_name=args.embedder,
-            project_id=project_id
+            project_id=project_id,
+            checkpoint_dir=checkpoint_dir
         )
+
+        # Determine resume flag
+        resume = not args.no_resume if hasattr(args, "no_resume") else True
 
         # Process documents using run_pipeline
         results = pipeline.run_pipeline(
@@ -170,7 +200,8 @@ def execute(args: argparse.Namespace) -> int:
             num_files=args.num_files,
             max_pages=args.max_pages,
             force_reprocess=args.force_reprocess,
-            test_mode=False
+            test_mode=False,
+            resume=resume
         )
 
         # Display results

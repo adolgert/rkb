@@ -1,12 +1,16 @@
 """Ingestion pipeline for processing documents through extraction and embedding."""
 
+import hashlib
 import json
 import logging
+import signal
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from rkb.core.checkpoint_manager import CheckpointManager
 from rkb.core.document_registry import DocumentRegistry
 from rkb.core.models import Document, DocumentStatus
 from rkb.core.text_processing import chunk_text_by_pages, extract_equations
@@ -26,6 +30,7 @@ class IngestionPipeline:
         embedder_name: str = "chroma",
         project_id: str | None = None,
         skip_embedding: bool = False,
+        checkpoint_dir: Path | None = None,
     ):
         """Initialize ingestion pipeline.
 
@@ -35,6 +40,7 @@ class IngestionPipeline:
             embedder_name: Name of embedder to use
             project_id: Project identifier for document organization
             skip_embedding: If True, only perform extraction, skip embedding
+            checkpoint_dir: Directory for checkpoint files (default: .checkpoints)
         """
         self.registry = registry or DocumentRegistry()
         self.extractor_name = extractor_name
@@ -45,6 +51,25 @@ class IngestionPipeline:
         # Initialize components
         self.extractor = get_extractor(extractor_name)
         self.embedder = get_embedder(embedder_name) if not skip_embedding else None
+
+        # Interrupt handling
+        self.interrupted = False
+        self.checkpoint_manager = CheckpointManager(
+            checkpoint_dir or Path(".checkpoints")
+        )
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
+
+    def _signal_handler(self, _signum: int, _frame: Any) -> None:  # noqa: ANN401
+        """Handle interrupt signal.
+
+        Args:
+            _signum: Signal number (unused, required by signal interface)
+            _frame: Current stack frame (unused, required by signal interface)
+        """
+        LOGGER.warning("\n⚠️  Interrupt received. Saving checkpoint...")
+        self.interrupted = True
+        # Don't exit immediately - let pipeline save state
 
     def process_single_document(
         self,
@@ -125,13 +150,15 @@ class IngestionPipeline:
                 # Extract equations
                 equation_info = extract_equations(extraction_result.content)
 
-                # Chunk the text
-                chunks = chunk_text_by_pages(extraction_result.content, max_chunk_size)
-                LOGGER.debug(f"  Created {len(chunks)} chunks")
+                # Chunk the text (returns tuples of (chunk_text, page_numbers))
+                chunks_with_pages = chunk_text_by_pages(extraction_result.content, max_chunk_size)
+                LOGGER.debug(f"  Created {len(chunks_with_pages)} chunks")
 
-                if chunks and not self.skip_embedding:
+                if chunks_with_pages and not self.skip_embedding:
+                    # Extract just the text for embedding
+                    chunk_texts = [chunk for chunk, _ in chunks_with_pages]
                     # Generate embeddings only if not skipping
-                    valid_chunks = [chunk for chunk in chunks if len(chunk.strip()) >= 50]
+                    valid_chunks = [chunk for chunk in chunk_texts if len(chunk.strip()) >= 50]
 
                     if valid_chunks:
                         embedding_result = self.embedder.embed(valid_chunks)
@@ -158,10 +185,11 @@ class IngestionPipeline:
             LOGGER.info(f"  Completed in {processing_time:.1f}s")
 
             # Calculate chunk information
-            chunk_count = len(chunks) if extraction_result.content else 0
+            chunk_count = len(chunks_with_pages) if extraction_result.content else 0
             valid_chunk_count = 0
-            if extraction_result.content and chunks and not self.skip_embedding:
-                valid_chunks = [chunk for chunk in chunks if len(chunk.strip()) >= 50]
+            if extraction_result.content and chunks_with_pages and not self.skip_embedding:
+                chunk_texts = [chunk for chunk, _ in chunks_with_pages]
+                valid_chunks = [chunk for chunk in chunk_texts if len(chunk.strip()) >= 50]
                 valid_chunk_count = len(valid_chunks)
 
             return {
@@ -202,8 +230,9 @@ class IngestionPipeline:
         force_reprocess: bool = False,
         max_chunk_size: int = 2000,
         log_file: str | None = None,
+        resume: bool = True,
     ) -> list[dict[str, Any]]:
-        """Process a batch of documents.
+        """Process a batch of documents with checkpoint/resume support.
 
         Args:
             pdf_list: List of file paths, list of dicts with 'path' key, or path to JSON file
@@ -211,6 +240,7 @@ class IngestionPipeline:
             force_reprocess: Whether to reprocess existing documents
             max_chunk_size: Maximum size for text chunks
             log_file: Optional path to save processing log
+            resume: Whether to resume from checkpoint if available
 
         Returns:
             List of processing results
@@ -230,31 +260,62 @@ class IngestionPipeline:
         # Normalize to list of paths
         if pdf_files and isinstance(pdf_files[0], dict):
             # Extract paths from dict format
-            file_paths = [item["path"] for item in pdf_files]
+            file_paths = [Path(item["path"]) for item in pdf_files]
         else:
-            file_paths = pdf_files
+            file_paths = [Path(p) for p in pdf_files]
 
         if max_files:
             file_paths = file_paths[:max_files]
+
+        # Generate batch ID from paths hash
+        batch_id = hashlib.md5(
+            "".join(str(p) for p in file_paths).encode()
+        ).hexdigest()[:16]
+
+        # Check for existing checkpoint
+        original_count = len(file_paths)
+        if resume:
+            file_paths = self.checkpoint_manager.get_remaining_files(
+                batch_id, file_paths
+            )
+            if len(file_paths) < original_count:
+                LOGGER.info(
+                    f"📋 Resuming: {len(file_paths)}/{original_count} files remaining"
+                )
 
         LOGGER.info(f"Processing {len(file_paths)} documents...")
 
         # Process each file
         results = []
+        completed = []
         success_count = 0
         error_count = 0
         skip_count = 0
         start_time = time.time()
 
         for i, file_path in enumerate(file_paths, 1):
-            LOGGER.info(f"[{i}/{len(file_paths)}] {Path(file_path).name}")
+            # Check for interrupt before each file
+            if self.interrupted:
+                LOGGER.info(
+                    f"\n💾 Saving checkpoint... ({i-1}/{len(file_paths)} completed)"
+                )
+                self.checkpoint_manager.save_checkpoint(
+                    batch_id,
+                    completed_files=[str(p) for p in completed],
+                    metadata={"total": original_count},
+                )
+                LOGGER.info("✓ Checkpoint saved. Run again to resume.")
+                sys.exit(0)
+
+            LOGGER.info(f"[{i}/{len(file_paths)}] {file_path.name}")
 
             result = self.process_single_document(
-                Path(file_path),
+                file_path,
                 force_reprocess=force_reprocess,
                 max_chunk_size=max_chunk_size,
             )
             results.append(result)
+            completed.append(file_path)
 
             if result["status"] == "success":
                 success_count += 1
@@ -284,6 +345,9 @@ class IngestionPipeline:
                 log_path.parent.mkdir(parents=True, exist_ok=True)
                 with log_path.open("w") as f:
                     json.dump(log_data, f, indent=2)
+
+        # Clear checkpoint on successful completion
+        self.checkpoint_manager.clear_checkpoint(batch_id)
 
         total_time = time.time() - start_time
 

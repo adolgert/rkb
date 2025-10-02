@@ -81,6 +81,16 @@ class NougatExtractor(ExtractorInterface):
         extraction_id = f"{doc_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
         try:
+            # Get actual page count from PDF using PyMuPDF
+            import fitz
+
+            try:
+                pdf_doc = fitz.open(source_path)
+                actual_page_count = len(pdf_doc)
+                pdf_doc.close()
+            except Exception:
+                actual_page_count = None
+
             # Calculate file hash for deduplication
             _ = hash_file(source_path)
 
@@ -88,7 +98,11 @@ class NougatExtractor(ExtractorInterface):
             _ = extract_arxiv_id(source_path.name)
 
             # Process PDF in chunks
-            chunks_result = self._extract_pdf_chunks(source_path, extraction_id)
+            chunks_result = self._extract_pdf_chunks(
+                source_path,
+                extraction_id,
+                actual_page_count
+            )
 
             if not chunks_result["content"]:
                 return ExtractionResult(
@@ -104,9 +118,12 @@ class NougatExtractor(ExtractorInterface):
             # Extract DOI from content
             _ = extract_doi(cleaned_content)
 
-            # Chunk the text for embedding
-            text_chunks = chunk_text_by_pages(cleaned_content)
-            chunk_metadata = create_chunk_metadata(text_chunks)
+            # Chunk the text for embedding with page tracking
+            text_chunks_with_pages = chunk_text_by_pages(cleaned_content)
+            chunk_metadata = create_chunk_metadata(text_chunks_with_pages)
+
+            # Extract just text for backward compatibility
+            text_chunks = [chunk for chunk, _ in text_chunks_with_pages]
 
             # Use PathResolver for consistent output location
             from rkb.core.paths import PathResolver
@@ -140,7 +157,12 @@ class NougatExtractor(ExtractorInterface):
                 error_message=str(e),
             )
 
-    def _extract_pdf_chunks(self, pdf_path: Path, extraction_id: str) -> dict:
+    def _extract_pdf_chunks(
+        self,
+        pdf_path: Path,
+        extraction_id: str,
+        actual_page_count: int | None = None
+    ) -> dict:
         """Extract PDF using small chunks to bypass problematic pages.
 
         Args:
@@ -183,7 +205,11 @@ class NougatExtractor(ExtractorInterface):
         # Combine content with metadata header
         if total_content:
             header = self._create_extraction_header(
-                pdf_path, extraction_id, successful_chunks, failed_chunks
+                pdf_path,
+                extraction_id,
+                successful_chunks,
+                failed_chunks,
+                actual_page_count
             )
             combined_content = header + "\n".join(total_content)
         else:
@@ -274,6 +300,7 @@ class NougatExtractor(ExtractorInterface):
         extraction_id: str,
         successful_chunks: list,
         failed_chunks: list,
+        actual_page_count: int | None = None,
     ) -> str:
         """Create metadata header for extracted content.
 
@@ -282,13 +309,19 @@ class NougatExtractor(ExtractorInterface):
             extraction_id: Unique extraction identifier
             successful_chunks: List of successfully processed chunks
             failed_chunks: List of failed chunks
+            actual_page_count: Actual page count from PyMuPDF
 
         Returns:
             Formatted header string
         """
+        page_info = (
+            f"<!-- Actual page count: {actual_page_count} -->\n"
+            if actual_page_count
+            else ""
+        )
         return f"""<!-- Nougat extraction of {pdf_path.name} -->
 <!-- Extraction ID: {extraction_id} -->
-<!-- Successful chunks: {len(successful_chunks)} -->
+{page_info}<!-- Successful chunks: {len(successful_chunks)} -->
 <!-- Failed chunks: {len(failed_chunks)} -->
 <!-- Extraction date: {datetime.now().isoformat()} -->
 
