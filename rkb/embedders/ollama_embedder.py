@@ -44,6 +44,18 @@ class OllamaEmbedder(EmbedderInterface):
         """Return the embedder version."""
         return "1.0.0"
 
+    @property
+    def minimum_threshold(self) -> float:
+        """Return the minimum similarity threshold for Ollama embeddings.
+
+        For Ollama embedding models, a similarity of 0.1 is a reasonable
+        threshold for filtering out irrelevant chunks.
+
+        Returns:
+            Minimum similarity threshold (0.1)
+        """
+        return 0.1
+
     def embed(self, text_chunks: list[str]) -> EmbeddingResult:
         """Generate embeddings for a list of texts.
 

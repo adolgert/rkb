@@ -21,6 +21,11 @@ class MockEmbedder(EmbedderInterface):
         """Return the embedder version."""
         return "1.0.0"
 
+    @property
+    def minimum_threshold(self) -> float:
+        """Return the minimum similarity threshold for mock embedder."""
+        return 0.1
+
     def embed(self, text_chunks: list[str]) -> EmbeddingResult:
         """Mock embed method."""
         mock_embeddings = [[0.1, 0.2, 0.3] for _ in text_chunks]
