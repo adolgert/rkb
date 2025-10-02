@@ -376,6 +376,71 @@ class SearchService:
             "chunk_id": best_chunk.chunk_id,
         }
 
+    def search_documents_ranked(
+        self,
+        query: str,
+        n_docs: int = 10,
+        metric: str = "similarity",
+        min_threshold: float | None = None,
+        filter_equations: bool | None = None,
+        project_id: str | None = None,
+    ) -> tuple[list[DocumentScore], list[ChunkResult], dict[str, Any]]:
+        """Search and rank documents using document-level metrics.
+
+        This is the main entry point for document-level search. It:
+        1. Fetches chunks iteratively until N documents found
+        2. Ranks documents using the specified metric
+        3. Returns top N documents with all chunks for display data
+
+        Args:
+            query: Search query text
+            n_docs: Number of documents to return (default: 10)
+            metric: Ranking metric - "similarity" (max pooling) or "relevance" (hit counting)
+            min_threshold: Minimum similarity threshold (if None, uses embedder default)
+            filter_equations: Filter by presence of equations
+            project_id: Filter by project ID
+
+        Returns:
+            Tuple of (ranked_docs, all_chunks, stats):
+            - ranked_docs: List of DocumentScore objects (top N, sorted by score)
+            - all_chunks: All chunks fetched (needed for display data)
+            - stats: Search statistics (chunks_fetched, iterations, etc.)
+        """
+        # Get threshold from embedder if not provided
+        if min_threshold is None:
+            min_threshold = self.embedder.minimum_threshold
+
+        # Step 1: Fetch chunks iteratively
+        all_chunks, stats = self.fetch_chunks_iteratively(
+            query=query,
+            n_docs=n_docs,
+            min_threshold=min_threshold,
+            filter_equations=filter_equations,
+            project_id=project_id,
+        )
+
+        # Step 2: Rank documents by chosen metric
+        if metric == "similarity":
+            ranked_docs = self.rank_by_similarity(all_chunks)
+        elif metric == "relevance":
+            ranked_docs = self.rank_by_relevance(all_chunks, min_threshold)
+        else:
+            raise ValueError(
+                f"Unknown metric '{metric}'. Expected 'similarity' or 'relevance'"
+            )
+
+        # Step 3: Return top N documents
+        top_n_docs = ranked_docs[:n_docs]
+
+        # Log search completion
+        LOGGER.info(
+            f"Document search complete: query='{query}', metric={metric}, "
+            f"found {len(top_n_docs)} documents (fetched {stats['chunks_fetched']} "
+            f"chunks in {stats['iterations']} iterations)"
+        )
+
+        return top_n_docs, all_chunks, stats
+
     def search_documents(
         self,
         query: str,
