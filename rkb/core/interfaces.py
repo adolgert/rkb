@@ -94,6 +94,19 @@ class EmbedderInterface(ABC):
     def version(self) -> str:
         """Return the embedder version."""
 
+    @property
+    @abstractmethod
+    def minimum_threshold(self) -> float:
+        """Return the minimum similarity threshold for this embedder.
+
+        This threshold defines the minimum similarity score that indicates
+        a meaningful match for this embedding model. Chunks with similarity
+        scores below this threshold are typically not considered relevant.
+
+        Returns:
+            Minimum similarity threshold (typically between 0.0 and 1.0)
+        """
+
 
 class ChunkerInterface(ABC):
     """Abstract interface for text chunkers."""

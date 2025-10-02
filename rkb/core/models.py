@@ -153,6 +153,28 @@ class SearchResult:
 
 
 @dataclass
+class DocumentScore:
+    """Document-level search result with score.
+
+    Contains only scoring information. Display data (chunks, pages, etc.)
+    should be fetched separately using get_display_data().
+    """
+
+    doc_id: str
+    score: float
+    metric_name: str  # "similarity" or "relevance"
+
+    # Metric-specific data (optional, for debugging/analysis)
+    matching_chunk_count: int | None = None  # For relevance metric
+    best_chunk_score: float | None = None  # For similarity metric
+
+    def __post_init__(self) -> None:
+        """Validate score."""
+        if self.score < 0:
+            self.score = 0.0
+
+
+@dataclass
 class DocumentResult:
     """Document-level search result (aggregated from chunks)."""
 

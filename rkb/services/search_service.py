@@ -8,7 +8,7 @@ from typing import Any
 import chromadb
 
 from rkb.core.document_registry import DocumentRegistry
-from rkb.core.models import ChunkResult, SearchResult
+from rkb.core.models import ChunkResult, DocumentScore, SearchResult
 from rkb.embedders.base import get_embedder
 
 LOGGER = logging.getLogger("rkb.services.search_service")
@@ -68,6 +68,313 @@ class SearchService:
                 )
 
         return self._collection
+
+    def fetch_chunks_iteratively(  # noqa: PLR0912
+        self,
+        query: str,
+        n_docs: int = 10,
+        min_threshold: float = 0.1,
+        filter_equations: bool | None = None,
+        project_id: str | None = None,
+    ) -> tuple[list[ChunkResult], dict[str, Any]]:
+        """Fetch chunks iteratively until we have enough documents above threshold.
+
+        This method implements the core iterative search loop for document-level search.
+        It fetches chunks in batches until either:
+        1. We have n_docs documents with chunks above min_threshold
+        2. We reach the maximum chunk limit
+        3. We exhaust all chunks in the database
+
+        Args:
+            query: Search query text
+            n_docs: Number of documents to find
+            min_threshold: Minimum similarity threshold for chunks
+            filter_equations: Filter by presence of equations
+            project_id: Filter by project ID
+
+        Returns:
+            Tuple of (all_chunks, stats_dict)
+            - all_chunks: List of ChunkResult objects fetched
+            - stats_dict: Statistics about the search (chunks_fetched, iterations, etc.)
+        """
+        # Configuration
+        MAX_TOTAL_CHUNKS = 10000
+
+        all_chunks: list[ChunkResult] = []
+        iteration = 0
+        chunks_per_iteration: list[int] = []
+
+        try:
+            collection = self._get_collection()
+
+            # Prepare search filters
+            where_filter = {}
+            if filter_equations is not None:
+                where_filter["has_equations"] = filter_equations
+            if project_id is not None:
+                where_filter["project_id"] = project_id
+
+            while True:
+                iteration += 1
+
+                # Determine fetch size for this iteration
+                if iteration == 1:
+                    # Initial fetch: get n_docs * 5 chunks
+                    # We need to fetch all at once since ChromaDB doesn't support offset
+                    fetch_size = MAX_TOTAL_CHUNKS  # Fetch all up to limit
+                else:
+                    # No more iterations needed - we fetch everything in first iteration
+                    break
+
+                # Perform search
+                search_kwargs = {
+                    "query_texts": [query],
+                    "n_results": min(fetch_size, MAX_TOTAL_CHUNKS),
+                }
+
+                if where_filter:
+                    search_kwargs["where"] = where_filter
+
+                results = collection.query(**search_kwargs)
+
+                # Convert to ChunkResult format
+                if results and results["documents"] and results["documents"][0]:
+                    documents = results["documents"][0]
+                    metadatas = results["metadatas"][0]
+                    distances = results["distances"][0]
+                    ids = results["ids"][0] if results["ids"] else [None] * len(documents)
+
+                    batch_chunks = []
+                    for doc, metadata, distance, chunk_id in zip(
+                        documents, metadatas, distances, ids, strict=True
+                    ):
+                        # Convert distance to similarity score
+                        similarity = 1 / (1 + distance) if distance is not None else 0.0
+
+                        chunk_result = ChunkResult(
+                            chunk_id=chunk_id or f"chunk_{len(all_chunks)}",
+                            content=doc,
+                            similarity=similarity,
+                            distance=distance,
+                            metadata=metadata or {},
+                        )
+                        batch_chunks.append(chunk_result)
+
+                    all_chunks.extend(batch_chunks)
+                    chunks_per_iteration.append(len(batch_chunks))
+
+                    LOGGER.info(
+                        f"Iteration {iteration}: fetched {len(batch_chunks)} chunks, "
+                        f"total: {len(all_chunks)}"
+                    )
+
+                    # Check if we got fewer chunks than requested (database exhausted)
+                    if len(batch_chunks) < fetch_size:
+                        LOGGER.info("Database exhausted - got fewer chunks than requested")
+                        break
+                else:
+                    # No results in this batch
+                    chunks_per_iteration.append(0)
+                    break
+
+                # Check termination: do we have enough documents above threshold?
+                chunks_above_threshold = [
+                    chunk for chunk in all_chunks if chunk.similarity >= min_threshold
+                ]
+
+                # Group by document to count documents
+                docs_found = set()
+                for chunk in chunks_above_threshold:
+                    if "doc_id" in chunk.metadata:
+                        docs_found.add(chunk.metadata["doc_id"])
+
+                LOGGER.info(
+                    f"After iteration {iteration}: {len(docs_found)} documents "
+                    f"with chunks above threshold {min_threshold}"
+                )
+
+                if len(docs_found) >= n_docs:
+                    LOGGER.info(f"Found enough documents ({len(docs_found)} >= {n_docs})")
+                    break
+
+                # Safety limit check
+                if len(all_chunks) >= MAX_TOTAL_CHUNKS:
+                    LOGGER.warning(
+                        f"Reached maximum chunk limit ({MAX_TOTAL_CHUNKS}), "
+                        "terminating search"
+                    )
+                    break
+
+            # Prepare statistics
+            chunks_above_threshold = [
+                chunk for chunk in all_chunks if chunk.similarity >= min_threshold
+            ]
+            docs_found = set()
+            for chunk in chunks_above_threshold:
+                if "doc_id" in chunk.metadata:
+                    docs_found.add(chunk.metadata["doc_id"])
+
+            stats = {
+                "chunks_fetched": len(all_chunks),
+                "chunks_above_threshold": len(chunks_above_threshold),
+                "iterations": iteration,
+                "documents_found": len(docs_found),
+                "chunks_per_iteration": chunks_per_iteration,
+            }
+
+            return all_chunks, stats
+
+        except Exception as e:
+            LOGGER.exception("Error in fetch_chunks_iteratively")
+            return [], {
+                "chunks_fetched": 0,
+                "chunks_above_threshold": 0,
+                "iterations": iteration,
+                "documents_found": 0,
+                "error": str(e),
+            }
+
+    def rank_by_similarity(
+        self,
+        chunks: list[ChunkResult],
+    ) -> list[DocumentScore]:
+        """Rank documents by similarity using max pooling.
+
+        For each document, takes the maximum chunk score as the document score.
+
+        Args:
+            chunks: List of chunk results to rank
+
+        Returns:
+            List of DocumentScore objects sorted by score descending
+        """
+        # Group chunks by document
+        doc_chunks: dict[str, list[ChunkResult]] = {}
+        for chunk in chunks:
+            doc_id = chunk.metadata.get("doc_id")
+            if doc_id:
+                if doc_id not in doc_chunks:
+                    doc_chunks[doc_id] = []
+                doc_chunks[doc_id].append(chunk)
+
+        # Compute max score for each document
+        doc_scores = []
+        for doc_id, doc_chunk_list in doc_chunks.items():
+            max_score = max(chunk.similarity for chunk in doc_chunk_list)
+            doc_score = DocumentScore(
+                doc_id=doc_id,
+                score=max_score,
+                metric_name="similarity",
+                best_chunk_score=max_score,
+                matching_chunk_count=len(doc_chunk_list),
+            )
+            doc_scores.append(doc_score)
+
+        # Sort by score descending
+        doc_scores.sort(key=lambda x: x.score, reverse=True)
+        return doc_scores
+
+    def rank_by_relevance(
+        self,
+        chunks: list[ChunkResult],
+        min_threshold: float,
+    ) -> list[DocumentScore]:
+        """Rank documents by relevance using hit counting.
+
+        For each document, counts how many chunks have score > threshold.
+
+        Args:
+            chunks: List of chunk results to rank
+            min_threshold: Minimum similarity threshold for counting hits
+
+        Returns:
+            List of DocumentScore objects sorted by hit count descending
+        """
+        # Group chunks by document
+        doc_chunks: dict[str, list[ChunkResult]] = {}
+        for chunk in chunks:
+            doc_id = chunk.metadata.get("doc_id")
+            if doc_id:
+                if doc_id not in doc_chunks:
+                    doc_chunks[doc_id] = []
+                doc_chunks[doc_id].append(chunk)
+
+        # Count hits for each document
+        doc_scores = []
+        for doc_id, doc_chunk_list in doc_chunks.items():
+            # Count chunks above threshold
+            hit_count = sum(1 for chunk in doc_chunk_list if chunk.similarity >= min_threshold)
+
+            # Also track best chunk score for this document
+            max_score = max(chunk.similarity for chunk in doc_chunk_list)
+
+            doc_score = DocumentScore(
+                doc_id=doc_id,
+                score=float(hit_count),  # Use hit count as score
+                metric_name="relevance",
+                matching_chunk_count=hit_count,
+                best_chunk_score=max_score,
+            )
+            doc_scores.append(doc_score)
+
+        # Sort by hit count descending, then by best chunk score
+        doc_scores.sort(key=lambda x: (x.score, x.best_chunk_score or 0), reverse=True)
+        return doc_scores
+
+    def get_display_data(
+        self,
+        doc_score: DocumentScore,
+        chunks: list[ChunkResult],
+        strategy: str = "top_chunk",
+    ) -> dict[str, Any]:
+        """Get display data for a document score.
+
+        Args:
+            doc_score: DocumentScore to get display data for
+            chunks: All chunks (needed to find chunks for this document)
+            strategy: Display strategy ("top_chunk", "top_n", "all_matching", "summary")
+
+        Returns:
+            Dictionary with display information:
+            - chunk_text: Text of the best matching chunk
+            - chunk_score: Score of the best matching chunk
+            - page_numbers: List of page numbers for the chunk
+            - chunk_id: ID of the best matching chunk
+        """
+        # Find chunks for this document
+        doc_chunks = [
+            chunk for chunk in chunks
+            if chunk.metadata.get("doc_id") == doc_score.doc_id
+        ]
+
+        if not doc_chunks:
+            return {
+                "chunk_text": None,
+                "chunk_score": None,
+                "page_numbers": [],
+                "chunk_id": None,
+                "error": "No chunks found for document",
+            }
+
+        if strategy == "top_chunk":
+            # Return best matching chunk
+            best_chunk = max(doc_chunks, key=lambda x: x.similarity)
+            return {
+                "chunk_text": best_chunk.content,
+                "chunk_score": best_chunk.similarity,
+                "page_numbers": best_chunk.metadata.get("page_numbers", []),
+                "chunk_id": best_chunk.chunk_id,
+            }
+
+        # Future strategies can be implemented here
+        # For now, default to top_chunk
+        best_chunk = max(doc_chunks, key=lambda x: x.similarity)
+        return {
+            "chunk_text": best_chunk.content,
+            "chunk_score": best_chunk.similarity,
+            "page_numbers": best_chunk.metadata.get("page_numbers", []),
+            "chunk_id": best_chunk.chunk_id,
+        }
 
     def search_documents(
         self,
