@@ -1,3 +1,38 @@
+# Goals
+
+We need document metadata because it helps us decide what to read from searches. The parts of the metadata
+that are the most meaningful are:
+
+ 1. Type of document, such as: article, inproceedings, report, book, presentation, notes, supplemental.
+ 2. Title
+ 3. Authors
+ 4. Year
+ 5. Journal/conference
+ 6. Page count
+
+This tool needs document metadata in order to succeed, but it is currently unclear how
+to get good metadata and how to judge when the metadata is good.
+
+I would like to implement several of the methods below as "extractors" of document metadata.
+I would like then to run these extractors on articles that are in subdirectories of ~/Zotero/storage.
+Then print results for human review. Print them as a list where the header is the file:// link to the document
+and then below are a list of document descriptions, as a single line for each, with the 6 pieces
+of information above, identified by the method of extraction.
+
+We need to be conscious of resource limits when exploring document metadata extraction.
+
+ - Limit queries to outside databases. These queries are very useful so they should be used, but sparingly during exploration.
+ - Start with methods that don't query outside databases.
+
+
+I think we may eventually collect document information using several methods and then
+batch process them with an LLM that decides whether the metadata makes sense for the
+information returned.
+
+```bash
+ollama run gemma2:9b-instruct-q4_K_M
+```
+
 There are several approaches for extracting metadata from academic PDFs, each with different strengths:
 
   1. PDF Metadata Fields (Built-in)
@@ -65,8 +100,12 @@ There are several approaches for extracting metadata from academic PDFs, each wi
   GROBID (Most Robust for Academic Papers)
 
   # Setup GROBID server
-  docker run -t --rm -p 8070:8070 lfoppiano/grobid:0.7.3
-
+  docker run -d -p 8070:8070 -e JAVA_TOOL_OPTIONS="-XX:-UseContainerSupport" lfoppiano/grobid:0.8.0
+Summary:
+  1. Run GROBID on host: docker run -d -p 8070:8070 lfoppiano/grobid:0.8.0
+  2. Access from this container using http://host.docker.internal:8070 or http://172.17.0.1:8070
+  3. Let me know when it's running and I'll implement the extractors
+  
   # Extract structured metadata
   curl -X POST \
     -F "input=@paper.pdf" \
