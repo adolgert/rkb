@@ -10,62 +10,43 @@ from rkb.pipelines.ingestion_pipeline import IngestionPipeline
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     """Add command-specific arguments."""
-    parser.add_argument(
-        "files",
-        nargs="+",
-        type=Path,
-        help="PDF files to extract"
-    )
+    parser.add_argument("files", nargs="+", type=Path, help="PDF files to extract")
 
     parser.add_argument(
         "--extractor",
         choices=["nougat"],
         default="nougat",
-        help="Extractor to use (default: nougat)"
+        help="Extractor to use (default: nougat)",
     )
 
     parser.add_argument(
-        "--max-pages",
-        type=int,
-        default=15,
-        help="Maximum pages per PDF (default: 15)"
+        "--max-pages", type=int, default=500, help="Maximum pages per PDF (default: 500)"
     )
 
-    parser.add_argument(
-        "--project-id",
-        help="Project ID to associate documents with"
-    )
+    parser.add_argument("--project-id", help="Project ID to associate documents with")
 
     parser.add_argument(
-        "--force-reprocess",
-        action="store_true",
-        help="Force reprocessing of existing documents"
+        "--force-reprocess", action="store_true", help="Force reprocessing of existing documents"
     )
 
     parser.add_argument(
         "--resume",
         action="store_true",
         default=True,
-        help="Resume from checkpoint if available (default: True)"
+        help="Resume from checkpoint if available (default: True)",
     )
 
-    parser.add_argument(
-        "--no-resume",
-        action="store_true",
-        help="Do not resume from checkpoint"
-    )
+    parser.add_argument("--no-resume", action="store_true", help="Do not resume from checkpoint")
 
     parser.add_argument(
-        "--checkpoint-dir",
-        type=Path,
-        help="Directory for checkpoint files (default: .checkpoints)"
+        "--checkpoint-dir", type=Path, help="Directory for checkpoint files (default: .checkpoints)"
     )
 
     parser.add_argument(
         "--db-path",
         type=Path,
         default="rkb_documents.db",
-        help="Path to document registry database (default: rkb_documents.db)"
+        help="Path to document registry database (default: rkb_documents.db)",
     )
 
 
@@ -93,9 +74,7 @@ def execute(args: argparse.Namespace) -> int:
 
         # Determine checkpoint directory
         checkpoint_dir = (
-            args.checkpoint_dir
-            if hasattr(args, "checkpoint_dir") and args.checkpoint_dir
-            else None
+            args.checkpoint_dir if hasattr(args, "checkpoint_dir") and args.checkpoint_dir else None
         )
 
         pipeline = IngestionPipeline(
@@ -103,7 +82,7 @@ def execute(args: argparse.Namespace) -> int:
             extractor_name=args.extractor,
             project_id=args.project_id,
             skip_embedding=True,  # Only extract, don't embed
-            checkpoint_dir=checkpoint_dir
+            checkpoint_dir=checkpoint_dir,
         )
 
         # Determine resume flag
@@ -115,7 +94,7 @@ def execute(args: argparse.Namespace) -> int:
             pdf_list=pdf_list,
             max_files=len(pdf_files),
             force_reprocess=args.force_reprocess,
-            resume=resume
+            resume=resume,
         )
 
         # Display results
@@ -145,5 +124,6 @@ def execute(args: argparse.Namespace) -> int:
         print(f"✗ Extract command failed: {e}")
         if args.verbose:
             import traceback
+
             traceback.print_exc()
         return 1
