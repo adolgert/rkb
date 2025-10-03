@@ -28,6 +28,7 @@ dependencies = [
     "tqdm>=4.64.0",
     "python-dotenv>=1.0.0",
     "pyyaml>=6.0",
+    "ollama>=0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -91,6 +92,8 @@ known-first-party = ["rkb"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["SLF001", "ANN002", "ARG001", "ARG002"]
+"rkb/cli/inspect_metadata.py" = ["SIM115", "PTH123", "T201"]
+"rkb/cli/build_metadata_db.py" = ["T201"]
 
 [tool.ruff.lint.pylint]
 max-branches = 16
