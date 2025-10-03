@@ -91,6 +91,12 @@ Show project details:
 rkb project show project_1759080878
 ```
 
+### Mathpix Markdown CLI (recommended)
+
+```bash
+  npm install -g mathpix-markdown-it
+  mmdc input.mmd -o output.pdf
+```
 ## Working Alternatives
 
 ### Direct Python API (Works Perfectly)

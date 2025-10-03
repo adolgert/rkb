@@ -24,6 +24,7 @@ class CompletePipeline:
         embedder_name: str = "chroma",
         project_id: str | None = None,
         checkpoint_dir: Path | None = None,
+        max_pages: int = 500,
     ):
         """Initialize complete pipeline.
 
@@ -33,6 +34,7 @@ class CompletePipeline:
             embedder_name: Name of embedder to use
             project_id: Project identifier for document organization
             checkpoint_dir: Directory for checkpoint files (default: .checkpoints)
+            max_pages: Maximum pages per PDF to process
         """
         self.registry = registry or DocumentRegistry()
         self.project_id = project_id or f"project_{int(time.time())}"
@@ -44,6 +46,7 @@ class CompletePipeline:
             embedder_name=embedder_name,
             project_id=self.project_id,
             checkpoint_dir=checkpoint_dir,
+            max_pages=max_pages,
         )
 
     def find_recent_pdfs(
@@ -128,7 +131,7 @@ class CompletePipeline:
         self,
         data_dir: str | Path = "data/initial",
         num_files: int = 50,
-        max_pages: int = 15,
+        max_pages: int = 500,
         max_chunk_size: int = 2000,
         force_reprocess: bool = False,
         test_mode: bool = True,
@@ -221,7 +224,7 @@ class CompletePipeline:
                 # Count successes and failures
                 success_count = sum(1 for r in processing_results if r["status"] == "success")
                 error_count = sum(1 for r in processing_results if r["status"] == "error")
-                skip_count = sum(1 for r in processing_results if r["status"] == "skipped")
+                skip_count = sum(1 for r in processing_results if r["status"] in ("skipped", "duplicate"))
 
                 pipeline_results["steps"]["process_documents"] = {
                     "success": success_count > 0,
@@ -232,7 +235,7 @@ class CompletePipeline:
                     "results": processing_results,
                 }
 
-                if success_count == 0:
+                if success_count == 0 and error_count > 0:
                     raise ValueError("No successful document processing")
 
                 LOGGER.info(f"Processed {success_count}/{len(files_to_process)} documents")
@@ -243,6 +246,20 @@ class CompletePipeline:
                     "error": str(e),
                 }
                 LOGGER.exception("Error during document processing")
+
+                # Add CLI-expected keys with zero values
+                end_time = time.time()
+                duration = end_time - start_time
+                pipeline_results.update({
+                    "success": False,
+                    "duration_seconds": round(duration, 1),
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "documents_processed": 0,
+                    "successful_extractions": 0,
+                    "failed_extractions": 0,
+                    "successful_embeddings": 0,
+                    "failed_embeddings": 0,
+                })
                 return pipeline_results
 
             # Step 3: Get processing statistics

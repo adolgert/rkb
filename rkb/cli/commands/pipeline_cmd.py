@@ -30,8 +30,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--max-pages",
         type=int,
-        default=15,
-        help="Maximum pages per PDF to process (default: 15)"
+        default=500,
+        help="Maximum pages per PDF to process (default: 500)"
     )
 
     parser.add_argument(
@@ -188,7 +188,8 @@ def execute(args: argparse.Namespace) -> int:
             extractor_name=args.extractor,
             embedder_name=args.embedder,
             project_id=project_id,
-            checkpoint_dir=checkpoint_dir
+            checkpoint_dir=checkpoint_dir,
+            max_pages=args.max_pages
         )
 
         # Determine resume flag

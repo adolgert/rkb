@@ -31,6 +31,7 @@ class IngestionPipeline:
         project_id: str | None = None,
         skip_embedding: bool = False,
         checkpoint_dir: Path | None = None,
+        max_pages: int = 500,
     ):
         """Initialize ingestion pipeline.
 
@@ -41,6 +42,7 @@ class IngestionPipeline:
             project_id: Project identifier for document organization
             skip_embedding: If True, only perform extraction, skip embedding
             checkpoint_dir: Directory for checkpoint files (default: .checkpoints)
+            max_pages: Maximum pages per PDF to process
         """
         self.registry = registry or DocumentRegistry()
         self.extractor_name = extractor_name
@@ -49,7 +51,7 @@ class IngestionPipeline:
         self.skip_embedding = skip_embedding
 
         # Initialize components
-        self.extractor = get_extractor(extractor_name)
+        self.extractor = get_extractor(extractor_name, max_pages=max_pages)
         self.embedder = get_embedder(embedder_name) if not skip_embedding else None
 
         # Interrupt handling
@@ -125,7 +127,9 @@ class IngestionPipeline:
             self.registry.update_document_status(document.doc_id, DocumentStatus.EXTRACTING)
 
             # Extract content - pass doc_id for consistent naming
+            LOGGER.debug(f"  Starting extraction with {self.extractor.name}...")
             extraction_result = self.extractor.extract(source_path, document.doc_id)
+            LOGGER.debug(f"  Extraction completed with status: {extraction_result.status.value}")
 
             # Set document ID in extraction result
             extraction_result.doc_id = document.doc_id
@@ -133,6 +137,8 @@ class IngestionPipeline:
             if extraction_result.status.value != "complete":
                 # Update document status to failed
                 self.registry.update_document_status(document.doc_id, DocumentStatus.FAILED)
+
+                LOGGER.warning(f"  Extraction failed: {extraction_result.error_message}")
 
                 return {
                     "status": "error",
@@ -319,7 +325,7 @@ class IngestionPipeline:
 
             if result["status"] == "success":
                 success_count += 1
-            elif result["status"] == "skipped":
+            elif result["status"] in ("skipped", "duplicate"):
                 skip_count += 1
             else:
                 error_count += 1
