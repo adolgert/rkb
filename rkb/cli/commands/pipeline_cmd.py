@@ -188,7 +188,8 @@ def execute(args: argparse.Namespace) -> int:
             extractor_name=args.extractor,
             embedder_name=args.embedder,
             project_id=project_id,
-            checkpoint_dir=checkpoint_dir
+            checkpoint_dir=checkpoint_dir,
+            max_pages=args.max_pages
         )
 
         # Determine resume flag

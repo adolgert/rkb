@@ -1,9 +1,13 @@
 """Nougat-based PDF extractor with chunked processing for robust extraction."""
 
+import os
 import subprocess
 import tempfile
 from datetime import datetime
 from pathlib import Path
+
+# Fix MKL threading layer conflict with libgomp
+os.environ.setdefault("MKL_SERVICE_FORCE_INTEL", "1")
 
 from rkb.core.interfaces import ExtractorInterface
 from rkb.core.models import ExtractionResult, ExtractionStatus
@@ -16,6 +20,38 @@ from rkb.core.text_processing import (
     hash_file,
 )
 from rkb.extractors.base import register_extractor
+
+
+def _patch_nougat_for_new_transformers() -> None:
+    """Patch nougat's BARTDecoder to work with transformers >=4.35."""
+    try:
+        from nougat.model import BARTDecoder
+        import inspect
+
+        # Check if patch is needed by inspecting the method signature
+        sig = inspect.signature(BARTDecoder.prepare_inputs_for_generation)
+        if 'cache_position' in sig.parameters:
+            # Already patched or compatible
+            return
+
+        # Save original method
+        original_prepare = BARTDecoder.prepare_inputs_for_generation
+
+        # Create wrapper that accepts and ignores cache_position
+        def prepare_inputs_wrapper(self, input_ids, **kwargs):
+            # Remove cache_position if present (added in transformers 4.35+)
+            kwargs.pop('cache_position', None)
+            return original_prepare(self, input_ids, **kwargs)
+
+        # Apply patch
+        BARTDecoder.prepare_inputs_for_generation = prepare_inputs_wrapper
+    except (ImportError, AttributeError):
+        # Nougat not installed or already compatible
+        pass
+
+
+# Apply compatibility patch on module import
+_patch_nougat_for_new_transformers()
 
 
 class NougatExtractor(ExtractorInterface):
@@ -132,6 +168,9 @@ class NougatExtractor(ExtractorInterface):
             # Save extraction to file
             extraction_path.write_text(cleaned_content, encoding="utf-8")
 
+            import logging
+            logging.getLogger(__name__).info(f"  Saved extraction to: {extraction_path}")
+
             return ExtractionResult(
                 doc_id=doc_id,
                 extraction_id=extraction_id,
@@ -173,9 +212,12 @@ class NougatExtractor(ExtractorInterface):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
 
+            # Determine actual pages to process (min of actual pages and max_pages)
+            pages_to_process = min(actual_page_count, self.max_pages) if actual_page_count else self.max_pages
+
             # Process in small chunks
-            for start_page in range(1, self.max_pages + 1, self.chunk_size):
-                end_page = min(start_page + self.chunk_size - 1, self.max_pages)
+            for start_page in range(1, pages_to_process + 1, self.chunk_size):
+                end_page = min(start_page + self.chunk_size - 1, pages_to_process)
 
                 try:
                     chunk_content = self._extract_chunk(pdf_path, start_page, end_page, temp_path)
@@ -186,13 +228,25 @@ class NougatExtractor(ExtractorInterface):
                         total_content.append(chunk_content)
                         successful_chunks.append((start_page, end_page))
                     else:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        content_len = len(chunk_content) if chunk_content else 0
+                        logger.warning(
+                            f"    Chunk {start_page}-{end_page}: Empty or insufficient content (length: {content_len})"
+                        )
+                        if chunk_content:
+                            logger.debug(f"    Content: {repr(chunk_content)}")
                         failed_chunks.append(
                             (start_page, end_page, "Empty or insufficient content")
                         )
 
                 except subprocess.TimeoutExpired:
+                    import logging
+                    logging.getLogger(__name__).warning(f"    Chunk {start_page}-{end_page}: Timeout")
                     failed_chunks.append((start_page, end_page, "Timeout"))
                 except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"    Chunk {start_page}-{end_page}: {str(e)}")
                     failed_chunks.append((start_page, end_page, str(e)))
 
         # Combine content with metadata header
@@ -252,6 +306,12 @@ class NougatExtractor(ExtractorInterface):
             expected_output.unlink()  # Clean up immediately
             return content
         # Analyze error for better reporting
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"      Nougat returncode: {result.returncode}")
+        logger.debug(f"      Nougat stdout: {result.stdout[:200] if result.stdout else 'None'}")
+        logger.debug(f"      Nougat stderr: {result.stderr[:200] if result.stderr else 'None'}")
+        logger.debug(f"      Output file exists: {expected_output.exists()}")
         error_info = self._analyze_chunk_error(result.stderr, start_page, end_page)
         raise RuntimeError(error_info)
 

@@ -22,6 +22,15 @@ pip install -e ".[all]"  # All features
 pip install -e ".[nougat,pdf]"  # OCR capabilities
 ```
 
+### Requirements
+
+- Python 3.12+ (tested with Python 3.13)
+- For Nougat OCR: `albumentations==1.2.1` is required (pinned in dependencies)
+
+### Known Issues
+
+If you encounter MKL threading errors when using Nougat, the extractor automatically sets `MKL_SERVICE_FORCE_INTEL=1` to resolve conflicts between Intel MKL and libgomp.
+
 ## Quick Start
 
 ```bash
