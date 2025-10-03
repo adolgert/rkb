@@ -14,6 +14,10 @@ from rkb.extractors.metadata.models import DocumentMetadata
 from rkb.extractors.metadata.pdf_metadata import PDFMetadataExtractor
 
 
+class Gemma2UnavailableError(Exception):
+    """Raised when Gemma2/Ollama is unavailable."""
+
+
 class Gemma2Extractor(MetadataExtractor):
     """Extract metadata by combining results from multiple sources using Gemma2 LLM."""
 
@@ -26,7 +30,21 @@ class Gemma2Extractor(MetadataExtractor):
             GrobidExtractor(),
             DOICrossRefExtractor(),
         ]
-        self.client = ollama.Client(host="http://host.docker.internal:11434")
+
+        # Auto-detect if running in Docker
+        ollama_host = self._detect_ollama_host()
+        self.client = ollama.Client(host=ollama_host)
+
+    def _detect_ollama_host(self) -> str:
+        """Detect the correct Ollama host based on environment.
+
+        Returns:
+            Ollama host URL
+        """
+        # Check if we're in a Docker container by looking for /.dockerenv
+        if Path("/.dockerenv").exists():
+            return "http://host.docker.internal:11434"
+        return "http://localhost:11434"
 
     @property
     def name(self) -> str:
@@ -88,8 +106,12 @@ class Gemma2Extractor(MetadataExtractor):
                 extractor=self.name,
             )
 
-        except Exception:
-            return DocumentMetadata(extractor=self.name)
+        except Exception as e:
+            # Raise exception if Ollama/Gemma2 is unavailable
+            raise Gemma2UnavailableError(
+                f"Failed to connect to Ollama/Gemma2: {e}. "
+                f"Please ensure Ollama is running."
+            ) from e
 
     def _build_prompt(self, source_metadata: list[dict]) -> str:
         """Build prompt for Gemma2 to combine metadata sources.

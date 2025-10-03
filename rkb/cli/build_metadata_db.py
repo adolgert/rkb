@@ -12,7 +12,7 @@ from pathlib import Path
 
 from rkb.core.text_processing import hash_file
 from rkb.extractors.metadata.doi_crossref import CrossRefUnavailableError
-from rkb.extractors.metadata.gemma2_extractor import Gemma2Extractor
+from rkb.extractors.metadata.gemma2_extractor import Gemma2Extractor, Gemma2UnavailableError
 
 
 def load_metadata_db(db_path: Path) -> dict:
@@ -70,7 +70,6 @@ def metadata_to_dict(metadata) -> dict:
         "year": metadata.year,
         "journal": metadata.journal,
         "page_count": metadata.page_count,
-        "extractor": metadata.extractor,
     }
 
 
@@ -150,9 +149,12 @@ def build_metadata_database(
             if verbose:
                 print(f"  → Saved metadata for hash {file_hash[:12]}...", file=sys.stderr)
 
-        except CrossRefUnavailableError as e:
+        except (CrossRefUnavailableError, Gemma2UnavailableError) as e:
+            error_source = (
+                "CrossRef API" if isinstance(e, CrossRefUnavailableError) else "Gemma2/Ollama"
+            )
             print(
-                f"\n⛔ CrossRef API Error: {e}",
+                f"\n⛔ {error_source} Error: {e}",
                 file=sys.stderr,
             )
             print(
