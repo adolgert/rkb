@@ -128,7 +128,7 @@ class CompletePipeline:
         self,
         data_dir: str | Path = "data/initial",
         num_files: int = 50,
-        max_pages: int = 15,
+        max_pages: int = 500,
         max_chunk_size: int = 2000,
         force_reprocess: bool = False,
         test_mode: bool = True,

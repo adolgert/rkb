@@ -30,8 +30,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--max-pages",
         type=int,
-        default=15,
-        help="Maximum pages per PDF to process (default: 15)"
+        default=500,
+        help="Maximum pages per PDF to process (default: 500)"
     )
 
     parser.add_argument(

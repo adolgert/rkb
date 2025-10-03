@@ -23,7 +23,7 @@ class NougatExtractor(ExtractorInterface):
 
     def __init__(
         self,
-        chunk_size: int = 3,
+        chunk_size: int = 1,
         max_pages: int = 50,
         timeout_per_chunk: int = 120,
         min_content_length: int = 50,
@@ -98,11 +98,7 @@ class NougatExtractor(ExtractorInterface):
             _ = extract_arxiv_id(source_path.name)
 
             # Process PDF in chunks
-            chunks_result = self._extract_pdf_chunks(
-                source_path,
-                extraction_id,
-                actual_page_count
-            )
+            chunks_result = self._extract_pdf_chunks(source_path, extraction_id, actual_page_count)
 
             if not chunks_result["content"]:
                 return ExtractionResult(
@@ -158,10 +154,7 @@ class NougatExtractor(ExtractorInterface):
             )
 
     def _extract_pdf_chunks(
-        self,
-        pdf_path: Path,
-        extraction_id: str,
-        actual_page_count: int | None = None
+        self, pdf_path: Path, extraction_id: str, actual_page_count: int | None = None
     ) -> dict:
         """Extract PDF using small chunks to bypass problematic pages.
 
@@ -205,11 +198,7 @@ class NougatExtractor(ExtractorInterface):
         # Combine content with metadata header
         if total_content:
             header = self._create_extraction_header(
-                pdf_path,
-                extraction_id,
-                successful_chunks,
-                failed_chunks,
-                actual_page_count
+                pdf_path, extraction_id, successful_chunks, failed_chunks, actual_page_count
             )
             combined_content = header + "\n".join(total_content)
         else:
@@ -315,9 +304,7 @@ class NougatExtractor(ExtractorInterface):
             Formatted header string
         """
         page_info = (
-            f"<!-- Actual page count: {actual_page_count} -->\n"
-            if actual_page_count
-            else ""
+            f"<!-- Actual page count: {actual_page_count} -->\n" if actual_page_count else ""
         )
         return f"""<!-- Nougat extraction of {pdf_path.name} -->
 <!-- Extraction ID: {extraction_id} -->
