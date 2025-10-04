@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from rkb.cli.commands import (
+    documents_cmd,
     experiment_cmd,
     extract_cmd,
     find_cmd,
@@ -62,13 +63,21 @@ Examples:
     )
     pipeline_cmd.add_arguments(pipeline_parser)
 
-    # Search command
+    # Search command (chunk-level)
     search_parser = subparsers.add_parser(
         "search",
-        help="Search the document corpus",
-        description="Perform semantic search over indexed documents"
+        help="Search for chunks in the corpus",
+        description="Perform semantic search over indexed chunks"
     )
     search_cmd.add_arguments(search_parser)
+
+    # Documents command (document-level)
+    documents_parser = subparsers.add_parser(
+        "documents",
+        help="Search for documents using ranking",
+        description="Perform document-level semantic search with ranking metrics"
+    )
+    documents_cmd.add_arguments(documents_parser)
 
     # Index command
     index_parser = subparsers.add_parser(
@@ -137,6 +146,8 @@ def main(args: list[str] | None = None) -> int:
             return pipeline_cmd.execute(parsed_args)
         if parsed_args.command == "search":
             return search_cmd.execute(parsed_args)
+        if parsed_args.command == "documents":
+            return documents_cmd.execute(parsed_args)
         if parsed_args.command == "index":
             return index_cmd.execute(parsed_args)
         if parsed_args.command == "find":

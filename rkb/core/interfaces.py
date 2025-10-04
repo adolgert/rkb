@@ -54,11 +54,18 @@ class EmbedderInterface(ABC):
     """Abstract interface for text embedders."""
 
     @abstractmethod
-    def embed(self, text_chunks: list[str]) -> EmbeddingResult:
+    def embed(
+        self,
+        text_chunks: list[str],
+        chunk_metadatas: list[dict] | None = None
+    ) -> EmbeddingResult:
         """Generate embeddings for text chunks.
 
         Args:
             text_chunks: List of text chunks to embed
+            chunk_metadatas: Optional list of metadata dicts for each chunk.
+                Each dict can contain fields like: doc_id, chunk_index,
+                page_numbers, has_equations, etc.
 
         Returns:
             EmbeddingResult containing embeddings and metadata

@@ -76,7 +76,7 @@ class TestZoteroWorkflow:
 
         embedder = MagicMock()
 
-        def mock_embed(chunks):
+        def mock_embed(chunks, chunk_metadatas=None):
             return EmbeddingResult(
                 embedding_id="test-embedding",
                 embedder_name="mock_embedder",

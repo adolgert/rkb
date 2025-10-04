@@ -62,7 +62,7 @@ class TestIngestionPipelineCheckpointResume:
         embedder.version = "1.0.0"
 
         # Mock successful embedding
-        def mock_embed(text_chunks):
+        def mock_embed(text_chunks, chunk_metadatas=None):
             return EmbeddingResult(
                 embedder_name="mock_embedder",
                 embeddings=[[0.1, 0.2, 0.3] for _ in text_chunks],
@@ -355,7 +355,7 @@ class TestCheckpointStateTracking:
         embedder.name = "mock_embedder"
         embedder.version = "1.0.0"
 
-        def mock_embed(text_chunks):
+        def mock_embed(text_chunks, chunk_metadatas=None):
             return EmbeddingResult(
                 embedder_name="mock_embedder",
                 embeddings=[[0.1, 0.2, 0.3] for _ in text_chunks],
@@ -464,7 +464,7 @@ class TestInterruptHandling:
         embedder.name = "mock_embedder"
         embedder.version = "1.0.0"
 
-        def mock_embed(text_chunks):
+        def mock_embed(text_chunks, chunk_metadatas=None):
             return EmbeddingResult(
                 embedder_name="mock_embedder",
                 embeddings=[[0.1, 0.2, 0.3] for _ in text_chunks],

@@ -161,13 +161,48 @@ class IngestionPipeline:
                 LOGGER.debug(f"  Created {len(chunks_with_pages)} chunks")
 
                 if chunks_with_pages and not self.skip_embedding:
-                    # Extract just the text for embedding
-                    chunk_texts = [chunk for chunk, _ in chunks_with_pages]
-                    # Generate embeddings only if not skipping
-                    valid_chunks = [chunk for chunk in chunk_texts if len(chunk.strip()) >= 50]
+                    # Extract text and page numbers for embedding
+                    valid_chunks_data = [
+                        (chunk, pages) for chunk, pages in chunks_with_pages
+                        if len(chunk.strip()) >= 50
+                    ]
 
-                    if valid_chunks:
-                        embedding_result = self.embedder.embed(valid_chunks)
+                    if valid_chunks_data:
+                        # Prepare chunk texts and metadata
+                        valid_chunks = [chunk for chunk, _ in valid_chunks_data]
+                        chunk_metadatas = []
+
+                        # Get PDF name from document object
+                        pdf_name = (
+                            getattr(document.source_path, "name", None)
+                            if document.source_path
+                            else None
+                        )
+
+                        for i, (chunk, pages) in enumerate(valid_chunks_data):
+                            # Analyze equations in this chunk
+                            chunk_eq_info = extract_equations(chunk)
+
+                            # Create metadata dict for this chunk
+                            metadata = {
+                                "doc_id": document.doc_id,
+                                "chunk_index": i,
+                                "page_numbers": pages,
+                                "has_equations": chunk_eq_info["has_equations"],
+                                "display_eq_count": len(chunk_eq_info["display_equations"]),
+                                "inline_eq_count": len(chunk_eq_info["inline_equations"]),
+                            }
+
+                            # Add optional fields if available
+                            if pdf_name:
+                                metadata["pdf_name"] = pdf_name
+                            if document.project_id:
+                                metadata["project_id"] = document.project_id
+
+                            chunk_metadatas.append(metadata)
+
+                        # Generate embeddings with metadata
+                        embedding_result = self.embedder.embed(valid_chunks, chunk_metadatas)
 
                         # Set document and extraction references
                         embedding_result.doc_id = document.doc_id

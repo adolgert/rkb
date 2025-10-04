@@ -56,11 +56,16 @@ class OllamaEmbedder(EmbedderInterface):
         """
         return 0.1
 
-    def embed(self, text_chunks: list[str]) -> EmbeddingResult:
+    def embed(
+        self,
+        text_chunks: list[str],
+        chunk_metadatas: list[dict] | None = None  # noqa: ARG002
+    ) -> EmbeddingResult:
         """Generate embeddings for a list of texts.
 
         Args:
             text_chunks: List of text chunks to embed
+            chunk_metadatas: Optional list of metadata dicts for each chunk (not used by Ollama)
 
         Returns:
             EmbeddingResult with generated embeddings and metadata
