@@ -105,6 +105,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Directory for checkpoint files (default: .checkpoints)"
     )
 
+    parser.add_argument(
+        "--extraction-dir",
+        type=Path,
+        default=Path("rkb_extractions"),
+        help="Directory for extraction output (default: rkb_extractions)"
+    )
+
 
 def execute(args: argparse.Namespace) -> int:
     """Execute the pipeline command."""
@@ -189,7 +196,8 @@ def execute(args: argparse.Namespace) -> int:
             embedder_name=args.embedder,
             project_id=project_id,
             checkpoint_dir=checkpoint_dir,
-            max_pages=args.max_pages
+            max_pages=args.max_pages,
+            extraction_dir=args.extraction_dir
         )
 
         # Determine resume flag

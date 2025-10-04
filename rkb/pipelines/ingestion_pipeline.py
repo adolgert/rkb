@@ -32,6 +32,7 @@ class IngestionPipeline:
         skip_embedding: bool = False,
         checkpoint_dir: Path | None = None,
         max_pages: int = 500,
+        extraction_dir: Path | None = None,
     ):
         """Initialize ingestion pipeline.
 
@@ -43,6 +44,7 @@ class IngestionPipeline:
             skip_embedding: If True, only perform extraction, skip embedding
             checkpoint_dir: Directory for checkpoint files (default: .checkpoints)
             max_pages: Maximum pages per PDF to process
+            extraction_dir: Directory for extraction output (default: rkb_extractions)
         """
         self.registry = registry or DocumentRegistry()
         self.extractor_name = extractor_name
@@ -51,7 +53,11 @@ class IngestionPipeline:
         self.skip_embedding = skip_embedding
 
         # Initialize components
-        self.extractor = get_extractor(extractor_name, max_pages=max_pages)
+        self.extractor = get_extractor(
+            extractor_name,
+            max_pages=max_pages,
+            output_dir=extraction_dir or Path("rkb_extractions")
+        )
         self.embedder = get_embedder(embedder_name) if not skip_embedding else None
 
         # Interrupt handling

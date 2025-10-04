@@ -25,6 +25,7 @@ class CompletePipeline:
         project_id: str | None = None,
         checkpoint_dir: Path | None = None,
         max_pages: int = 500,
+        extraction_dir: Path | None = None,
     ):
         """Initialize complete pipeline.
 
@@ -35,6 +36,7 @@ class CompletePipeline:
             project_id: Project identifier for document organization
             checkpoint_dir: Directory for checkpoint files (default: .checkpoints)
             max_pages: Maximum pages per PDF to process
+            extraction_dir: Directory for extraction output (default: rkb_extractions)
         """
         self.registry = registry or DocumentRegistry()
         self.project_id = project_id or f"project_{int(time.time())}"
@@ -47,6 +49,7 @@ class CompletePipeline:
             project_id=self.project_id,
             checkpoint_dir=checkpoint_dir,
             max_pages=max_pages,
+            extraction_dir=extraction_dir,
         )
 
     def find_recent_pdfs(
@@ -224,7 +227,9 @@ class CompletePipeline:
                 # Count successes and failures
                 success_count = sum(1 for r in processing_results if r["status"] == "success")
                 error_count = sum(1 for r in processing_results if r["status"] == "error")
-                skip_count = sum(1 for r in processing_results if r["status"] in ("skipped", "duplicate"))
+                skip_count = sum(
+                    1 for r in processing_results if r["status"] in ("skipped", "duplicate")
+                )
 
                 pipeline_results["steps"]["process_documents"] = {
                     "success": success_count > 0,

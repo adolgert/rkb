@@ -49,6 +49,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Path to document registry database (default: rkb_documents.db)",
     )
 
+    parser.add_argument(
+        "--extraction-dir",
+        type=Path,
+        default=Path("rkb_extractions"),
+        help="Directory for extraction output (default: rkb_extractions)",
+    )
+
 
 def execute(args: argparse.Namespace) -> int:
     """Execute the extract command."""
@@ -83,6 +90,7 @@ def execute(args: argparse.Namespace) -> int:
             project_id=args.project_id,
             skip_embedding=True,  # Only extract, don't embed
             checkpoint_dir=checkpoint_dir,
+            extraction_dir=args.extraction_dir,
         )
 
         # Determine resume flag
