@@ -124,7 +124,8 @@ def execute(args: argparse.Namespace) -> int:
             embedder_name=args.embedder,
             project_id=args.project_id,
             checkpoint_dir=checkpoint_dir,
-            extraction_dir=args.extraction_dir
+            extraction_dir=args.extraction_dir,
+            vector_db_path=args.vector_db_path
         )
 
         # Extract paths for indexing

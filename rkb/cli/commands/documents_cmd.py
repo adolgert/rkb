@@ -228,8 +228,14 @@ def _display_results(
 
         # Print document info
         if doc_metadata:
-            doc_name = doc_metadata.get("pdf_name", doc_metadata.get("file_name", "Unknown"))
-            doc_path = doc_metadata.get("file_path", "")
+            # Get document name from source_path or title
+            if doc_metadata.source_path:
+                doc_name = doc_metadata.source_path.name
+                doc_path = str(doc_metadata.source_path)
+            else:
+                doc_name = doc_metadata.title or "Unknown"
+                doc_path = ""
+
             print(f"📄 Document: {doc_name}")
             if doc_path:
                 # Get page numbers from best chunk

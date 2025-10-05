@@ -33,6 +33,7 @@ class IngestionPipeline:
         checkpoint_dir: Path | None = None,
         max_pages: int = 500,
         extraction_dir: Path | None = None,
+        vector_db_path: Path | None = None,
     ):
         """Initialize ingestion pipeline.
 
@@ -45,6 +46,7 @@ class IngestionPipeline:
             checkpoint_dir: Directory for checkpoint files (default: .checkpoints)
             max_pages: Maximum pages per PDF to process
             extraction_dir: Directory for extraction output (default: rkb_extractions)
+            vector_db_path: Path to vector database (default: rkb_chroma_db)
         """
         self.registry = registry or DocumentRegistry()
         self.extractor_name = extractor_name
@@ -58,7 +60,15 @@ class IngestionPipeline:
             max_pages=max_pages,
             output_dir=extraction_dir or Path("rkb_extractions")
         )
-        self.embedder = get_embedder(embedder_name) if not skip_embedding else None
+
+        # Initialize embedder with vector_db_path if provided
+        if not skip_embedding:
+            embedder_kwargs = {}
+            if vector_db_path:
+                embedder_kwargs["db_path"] = vector_db_path
+            self.embedder = get_embedder(embedder_name, **embedder_kwargs)
+        else:
+            self.embedder = None
 
         # Interrupt handling
         self.interrupted = False
@@ -118,44 +128,85 @@ class IngestionPipeline:
                     "doc_id": document.doc_id,
                 }
 
+            # For indexing workflow: allow processing EXTRACTED documents
+            # even if not force_reprocess
             if not is_new and not force_reprocess:
-                return {
-                    "status": "duplicate",
-                    "message": "Document already exists with content hash",
-                    "source_path": str(source_path),
-                    "doc_id": document.doc_id,
-                    "content_hash": document.content_hash,
-                }
+                # If document is EXTRACTED and we want to do embedding, allow it to proceed
+                if document.status == DocumentStatus.EXTRACTED and not self.skip_embedding:
+                    # Continue to embedding step below
+                    pass
+                else:
+                    return {
+                        "status": "duplicate",
+                        "message": "Document already exists with content hash",
+                        "source_path": str(source_path),
+                        "doc_id": document.doc_id,
+                        "content_hash": document.content_hash,
+                    }
 
             LOGGER.info(f"Processing: {source_path.name} (doc_id: {document.doc_id[:8]}...)")
 
-            # Update document status
-            self.registry.update_document_status(document.doc_id, DocumentStatus.EXTRACTING)
+            # Check if document is already extracted (for indexing-only workflow)
+            if document.status == DocumentStatus.EXTRACTED:
+                # Load existing extraction from file using PathResolver
+                from rkb.core.paths import PathResolver
 
-            # Extract content - pass doc_id for consistent naming
-            LOGGER.debug(f"  Starting extraction with {self.extractor.name}...")
-            extraction_result = self.extractor.extract(source_path, document.doc_id)
-            LOGGER.debug(f"  Extraction completed with status: {extraction_result.status.value}")
+                LOGGER.debug("  Document already extracted, loading existing content...")
+                extraction_file = PathResolver.get_extraction_path(
+                    document.doc_id, self.extractor.output_dir
+                )
+                LOGGER.debug(f"  Looking for extraction file: {extraction_file}")
 
-            # Set document ID in extraction result
-            extraction_result.doc_id = document.doc_id
+                if not extraction_file.exists():
+                    LOGGER.error(f"  No extraction file found: {extraction_file}")
+                    return {
+                        "status": "error",
+                        "message": "Document marked as EXTRACTED but no extraction file found",
+                        "source_path": str(source_path),
+                        "doc_id": document.doc_id,
+                        "processing_time": round(time.time() - start_time, 1),
+                    }
 
-            if extraction_result.status.value != "complete":
-                # Update document status to failed
-                self.registry.update_document_status(document.doc_id, DocumentStatus.FAILED)
+                # Create ExtractionResult from file
+                from rkb.core.models import ExtractionResult, ExtractionStatus
+                content = extraction_file.read_text(encoding="utf-8")
+                extraction_result = ExtractionResult(
+                    doc_id=document.doc_id,
+                    status=ExtractionStatus.COMPLETE,
+                    content=content,
+                    extractor_name=self.extractor.name,
+                    extraction_path=extraction_file
+                )
+            else:
+                # Update document status
+                self.registry.update_document_status(document.doc_id, DocumentStatus.EXTRACTING)
 
-                LOGGER.warning(f"  Extraction failed: {extraction_result.error_message}")
+                # Extract content - pass doc_id for consistent naming
+                LOGGER.debug(f"  Starting extraction with {self.extractor.name}...")
+                extraction_result = self.extractor.extract(source_path, document.doc_id)
+                LOGGER.debug(
+                    f"  Extraction completed with status: {extraction_result.status.value}"
+                )
 
-                return {
-                    "status": "error",
-                    "message": f"Extraction failed: {extraction_result.error_message}",
-                    "source_path": str(source_path),
-                    "doc_id": document.doc_id,
-                    "processing_time": round(time.time() - start_time, 1),
-                }
+                # Set document ID in extraction result
+                extraction_result.doc_id = document.doc_id
 
-            # Add extraction to registry
-            self.registry.add_extraction(extraction_result)
+                if extraction_result.status.value != "complete":
+                    # Update document status to failed
+                    self.registry.update_document_status(document.doc_id, DocumentStatus.FAILED)
+
+                    LOGGER.warning(f"  Extraction failed: {extraction_result.error_message}")
+
+                    return {
+                        "status": "error",
+                        "message": f"Extraction failed: {extraction_result.error_message}",
+                        "source_path": str(source_path),
+                        "doc_id": document.doc_id,
+                        "processing_time": round(time.time() - start_time, 1),
+                    }
+
+                # Add extraction to registry
+                self.registry.add_extraction(extraction_result)
 
             # Process content if available
             if extraction_result.content:
@@ -189,11 +240,15 @@ class IngestionPipeline:
                             # Analyze equations in this chunk
                             chunk_eq_info = extract_equations(chunk)
 
+                            # Convert page_numbers list to comma-separated string for ChromaDB
+                            # ChromaDB only accepts str, int, float, bool, or None - not lists
+                            page_numbers_str = ",".join(str(p) for p in pages) if pages else ""
+
                             # Create metadata dict for this chunk
                             metadata = {
                                 "doc_id": document.doc_id,
                                 "chunk_index": i,
-                                "page_numbers": pages,
+                                "page_numbers": page_numbers_str,
                                 "has_equations": chunk_eq_info["has_equations"],
                                 "display_eq_count": len(chunk_eq_info["display_equations"]),
                                 "inline_eq_count": len(chunk_eq_info["inline_equations"]),

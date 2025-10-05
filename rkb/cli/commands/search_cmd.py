@@ -152,8 +152,8 @@ def _perform_search(search_service: SearchService, query: str, args: argparse.Na
         query=query,
         n_results=args.num_results,
         filter_equations=filter_equations,
-        project_id=args.project_id,
-        document_ids=args.document_ids
+        project_id=getattr(args, "project_id", None),
+        document_ids=getattr(args, "document_ids", None)
     )
 
     # Display results
