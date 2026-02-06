@@ -3,6 +3,7 @@
 
 import argparse
 from pathlib import Path
+from urllib.parse import quote
 
 from rkb.core.document_registry import DocumentRegistry
 from rkb.services.search_service import SearchService
@@ -241,8 +242,15 @@ def _display_results(
                 # Get page numbers from best chunk
                 pages = display_data.get("page_numbers", [])
                 page_str = f"#page={pages[0]}" if pages else ""
-                file_link = f"file://{doc_path}{page_str}"
+                # URL-encode the path, preserving forward slashes
+                encoded_path = quote(doc_path, safe='/')
+                file_link = f"file://{encoded_path}{page_str}"
                 print(f"🔗 Link: {file_link}")
+
+            # Get and display extraction (mmd) file path
+            extraction = search_service.registry.get_extraction_by_doc_id(doc_score.doc_id)
+            if extraction and extraction.extraction_path:
+                print(f"📝 Extraction: {extraction.extraction_path}")
         else:
             print(f"📄 Document ID: {doc_score.doc_id}")
 
