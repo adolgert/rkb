@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from rkb.core.models import Document, DocumentStatus, EmbeddingResult, ExtractionResult
+from rkb.core.models import Document, DocumentStatus, EmbeddingResult, ExtractionResult, ExtractionStatus
 
 LOGGER = logging.getLogger("rkb.core.document_registry")
 
@@ -447,7 +447,9 @@ class DocumentRegistry:
             For now, just updates the existing document's source_path if needed.
             In future, could maintain multiple source references.
         """
-        LOGGER.info(f"📋 Linking duplicate: {new_source_path} -> {existing_doc.doc_id}")
+        # Only log as duplicate if it's a different path with the same content
+        if existing_doc.source_path != new_source_path:
+            LOGGER.info(f"📋 Linking duplicate: {new_source_path} -> {existing_doc.doc_id}")
         return existing_doc
 
     def process_new_document(
@@ -540,6 +542,43 @@ class DocumentRegistry:
             )
 
         return documents
+
+    def get_extraction_by_doc_id(self, doc_id: str) -> ExtractionResult | None:
+        """Get the latest extraction result for a document.
+
+        Args:
+            doc_id: Document identifier
+
+        Returns:
+            ExtractionResult if found, None otherwise
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(
+                """
+                SELECT * FROM extractions
+                WHERE doc_id = ?
+                ORDER BY extraction_date DESC
+                LIMIT 1
+            """,
+                (doc_id,),
+            )
+            row = cursor.fetchone()
+
+            if row:
+                return ExtractionResult(
+                    extraction_id=row["extraction_id"],
+                    doc_id=row["doc_id"],
+                    extractor_name=row["extractor_name"],
+                    extractor_version=row["extractor_version"],
+                    extraction_path=Path(row["extraction_path"]) if row["extraction_path"] else None,
+                    content=row["content"],
+                    page_count=row["page_count"],
+                    status=ExtractionStatus(row["status"]),
+                    error_message=row["error_message"],
+                    extraction_date=datetime.fromisoformat(row["extraction_date"]),
+                )
+            return None
 
     def get_processing_stats(self) -> dict[str, Any]:
         """Get processing statistics.

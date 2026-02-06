@@ -52,11 +52,16 @@ class ChromaEmbedder(EmbedderInterface):
         """
         return 0.1
 
-    def embed(self, text_chunks: list[str]) -> EmbeddingResult:
+    def embed(
+        self,
+        text_chunks: list[str],
+        chunk_metadatas: list[dict] | None = None
+    ) -> EmbeddingResult:
         """Generate embeddings using Chroma's default model.
 
         Args:
             text_chunks: List of text chunks to embed
+            chunk_metadatas: Optional list of metadata dicts for each chunk
 
         Returns:
             EmbeddingResult with generated embeddings and metadata
@@ -97,12 +102,28 @@ class ChromaEmbedder(EmbedderInterface):
             # ChromaDB handles embeddings internally - we don't need to extract them
             chunk_ids = [f"chunk_{i}_{datetime.now().timestamp()}" for i in range(len(text_chunks))]
 
+            # Prepare metadata for each chunk
+            if chunk_metadatas and len(chunk_metadatas) == len(text_chunks):
+                # Use provided metadata, adding created timestamp
+                metadatas = []
+                for i, meta in enumerate(chunk_metadatas):
+                    chunk_meta = dict(meta)  # Copy to avoid modifying original
+                    chunk_meta["created"] = datetime.now().isoformat()
+                    if "chunk_index" not in chunk_meta:
+                        chunk_meta["chunk_index"] = i
+                    metadatas.append(chunk_meta)
+            else:
+                # Fallback to minimal metadata
+                metadatas = [
+                    {"chunk_index": i, "created": datetime.now().isoformat()}
+                    for i in range(len(text_chunks))
+                ]
+
             # Add documents to collection (ChromaDB generates and stores embeddings internally)
             collection.add(
                 documents=text_chunks,
                 ids=chunk_ids,
-                metadatas=[{"chunk_index": i, "created": datetime.now().isoformat()}
-                          for i in range(len(text_chunks))],
+                metadatas=metadatas,
             )
 
             # Return result without extracting embeddings (ChromaDB stores them internally)

@@ -17,7 +17,7 @@ class TestNougatExtractor:
         """Test extractor initialization with default values."""
         extractor = NougatExtractor()
 
-        assert extractor.chunk_size == 3
+        assert extractor.chunk_size == 1
         assert extractor.max_pages == 50
         assert extractor.timeout_per_chunk == 120
         assert extractor.min_content_length == 50

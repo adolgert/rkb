@@ -2,6 +2,7 @@
 
 # Import all command modules for easy access
 from . import (
+    documents_cmd,
     experiment_cmd,
     extract_cmd,
     find_cmd,
@@ -12,6 +13,7 @@ from . import (
 )
 
 __all__ = [
+    "documents_cmd",
     "experiment_cmd",
     "extract_cmd",
     "find_cmd",

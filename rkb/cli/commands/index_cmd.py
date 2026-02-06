@@ -61,6 +61,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Directory for checkpoint files (default: .checkpoints)"
     )
 
+    parser.add_argument(
+        "--extraction-dir",
+        type=Path,
+        default=Path("rkb_extractions"),
+        help="Directory for extraction output (default: rkb_extractions)"
+    )
+
 
 def execute(args: argparse.Namespace) -> int:
     """Execute the index command."""
@@ -116,7 +123,9 @@ def execute(args: argparse.Namespace) -> int:
             extractor_name="nougat",  # Not used for indexing-only
             embedder_name=args.embedder,
             project_id=args.project_id,
-            checkpoint_dir=checkpoint_dir
+            checkpoint_dir=checkpoint_dir,
+            extraction_dir=args.extraction_dir,
+            vector_db_path=args.vector_db_path
         )
 
         # Extract paths for indexing

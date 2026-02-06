@@ -166,6 +166,12 @@ addopts = [
     "--cov-report=term-missing",
     "--cov-report=html",
 ]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "requires_gpu: marks tests requiring GPU",
+    "requires_ollama: marks tests requiring Ollama service",
+    "system: marks system-level integration tests",
+]
 
 [tool.mypy]
 python_version = "3.12"

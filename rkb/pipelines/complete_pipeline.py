@@ -25,6 +25,8 @@ class CompletePipeline:
         project_id: str | None = None,
         checkpoint_dir: Path | None = None,
         max_pages: int = 500,
+        extraction_dir: Path | None = None,
+        vector_db_path: Path | None = None,
     ):
         """Initialize complete pipeline.
 
@@ -35,6 +37,8 @@ class CompletePipeline:
             project_id: Project identifier for document organization
             checkpoint_dir: Directory for checkpoint files (default: .checkpoints)
             max_pages: Maximum pages per PDF to process
+            extraction_dir: Directory for extraction output (default: rkb_extractions)
+            vector_db_path: Path to vector database (default: rkb_chroma_db)
         """
         self.registry = registry or DocumentRegistry()
         self.project_id = project_id or f"project_{int(time.time())}"
@@ -47,6 +51,8 @@ class CompletePipeline:
             project_id=self.project_id,
             checkpoint_dir=checkpoint_dir,
             max_pages=max_pages,
+            extraction_dir=extraction_dir,
+            vector_db_path=vector_db_path,
         )
 
     def find_recent_pdfs(
@@ -224,7 +230,9 @@ class CompletePipeline:
                 # Count successes and failures
                 success_count = sum(1 for r in processing_results if r["status"] == "success")
                 error_count = sum(1 for r in processing_results if r["status"] == "error")
-                skip_count = sum(1 for r in processing_results if r["status"] in ("skipped", "duplicate"))
+                skip_count = sum(
+                    1 for r in processing_results if r["status"] in ("skipped", "duplicate")
+                )
 
                 pipeline_results["steps"]["process_documents"] = {
                     "success": success_count > 0,
@@ -451,12 +459,19 @@ class CompletePipeline:
         """
         if skip_extraction:
             # For indexing-only, we need to create a pipeline that only does embedding
+            # Get vector_db_path from the main pipeline's embedder
+            vector_db_path = None
+            if hasattr(self.ingestion_pipeline, "embedder") and self.ingestion_pipeline.embedder:
+                vector_db_path = getattr(self.ingestion_pipeline.embedder, "db_path", None)
+
             embedding_pipeline = IngestionPipeline(
                 registry=self.registry,
                 extractor_name=self.ingestion_pipeline.extractor_name,
                 embedder_name=self.ingestion_pipeline.embedder_name,
                 project_id=project_id or self.project_id,
-                skip_embedding=False  # We want embedding for indexing
+                skip_embedding=False,  # We want embedding for indexing
+                extraction_dir=self.ingestion_pipeline.extractor.output_dir,
+                vector_db_path=vector_db_path
             )
 
             # Process only documents that are already extracted
