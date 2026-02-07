@@ -14,10 +14,12 @@ from rkb.collection.scanner import scan_pdf_files
 from rkb.collection.zotero_sync import scan_zotero_hashes, sync_batch_to_zotero
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
     from pathlib import Path
 
     from rkb.collection.config import CollectionConfig
+
+_PROGRESS_THRESHOLD = 10
 
 
 @dataclass
@@ -138,6 +140,45 @@ def _append_zotero_failures_for_hashes(
         )
 
 
+def _iter_with_progress(items: list[Path], description: str):
+    if len(items) <= _PROGRESS_THRESHOLD:
+        return items
+
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        return items
+
+    return tqdm(items, desc=description, unit="file")
+
+
+def _build_zotero_progress_callback(
+    total: int,
+) -> tuple[Callable[[dict], None] | None, Callable[[], None]]:
+    if total <= _PROGRESS_THRESHOLD:
+        return None, lambda: None
+
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        return None, lambda: None
+
+    progress = tqdm(total=total, desc="Zotero sync", unit="file")
+
+    def callback(_event: dict) -> None:
+        progress.update(1)
+
+    def close() -> None:
+        progress.close()
+
+    return callback, close
+
+
+def _validate_non_empty_pdf(path: Path) -> None:
+    if path.stat().st_size == 0:
+        raise ValueError(f"Zero-byte PDF: {path}")
+
+
 def ingest_directories(
     directories: list[Path],
     config: CollectionConfig,
@@ -161,9 +202,10 @@ def ingest_directories(
         write_catalog.initialize()
 
     try:
-        for pdf_path in pdf_files:
+        for pdf_path in _iter_with_progress(pdf_files, "Ingest scan"):
             source_hash: str | None = None
             try:
+                _validate_non_empty_pdf(pdf_path)
                 source_hash = hash_file_sha256(pdf_path)
 
                 duplicate = is_stored(config.library_root, source_hash)
@@ -245,13 +287,20 @@ def ingest_directories(
             try:
                 zotero_hashes = scan_zotero_hashes(config.zotero_storage)
                 zot_client = _build_zotero_client(config)
-                zotero_summary = sync_batch_to_zotero(
-                    hashes_to_import=newly_ingested_hashes,
-                    catalog=write_catalog,
-                    library_root=config.library_root,
-                    zot=zot_client,
-                    zotero_hashes=zotero_hashes,
+                progress_callback, close_progress = _build_zotero_progress_callback(
+                    len(newly_ingested_hashes)
                 )
+                try:
+                    zotero_summary = sync_batch_to_zotero(
+                        hashes_to_import=newly_ingested_hashes,
+                        catalog=write_catalog,
+                        library_root=config.library_root,
+                        zot=zot_client,
+                        zotero_hashes=zotero_hashes,
+                        progress_callback=progress_callback,
+                    )
+                finally:
+                    close_progress()
                 summary.zotero_imported += zotero_summary["imported"]
                 summary.zotero_existing += zotero_summary["skipped"]
                 summary.failed += zotero_summary["failed"]

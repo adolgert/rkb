@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
+import os
+from pathlib import Path
 
 
 def scan_pdf_files(directories: list[Path]) -> list[Path]:
@@ -22,17 +20,32 @@ def scan_pdf_files(directories: list[Path]) -> list[Path]:
             raise FileNotFoundError(expanded)
         if not expanded.is_dir():
             raise NotADirectoryError(expanded)
+        if not os.access(expanded, os.R_OK | os.X_OK):
+            raise PermissionError(expanded)
 
-        for candidate in expanded.rglob("*"):
-            if not candidate.is_file():
-                continue
-            if candidate.suffix.lower() != ".pdf":
-                continue
+        try:
+            with os.scandir(expanded):
+                pass
+        except PermissionError:
+            raise PermissionError(expanded) from None
 
-            resolved = candidate.resolve()
-            if resolved in seen:
-                continue
-            seen.add(resolved)
-            discovered.append(resolved)
+        for root, _dirs, files in os.walk(expanded, onerror=lambda _error: None):
+            root_path = Path(root)
+            for filename in files:
+                if not filename.lower().endswith(".pdf"):
+                    continue
+
+                candidate = root_path / filename
+                try:
+                    resolved = candidate.resolve()
+                    if resolved in seen:
+                        continue
+                    if not resolved.is_file():
+                        continue
+                except OSError:
+                    continue
+
+                seen.add(resolved)
+                discovered.append(resolved)
 
     return sorted(discovered, key=str)

@@ -17,6 +17,7 @@ from rkb.cli.commands import (
     project_cmd,
     rectify_cmd,
     search_cmd,
+    status_cmd,
     triage_cmd,
 )
 
@@ -146,10 +147,18 @@ Examples:
     )
     triage_cmd.add_arguments(triage_parser)
 
+    # Status command
+    status_parser = subparsers.add_parser(
+        "status",
+        help="Show canonical collection and Zotero sync status",
+        description="Report canonical counts, Zotero coverage, and recent ingest activity",
+    )
+    status_cmd.add_arguments(status_parser)
+
     return parser
 
 
-def main(args: list[str] | None = None) -> int:
+def main(args: list[str] | None = None) -> int:  # noqa: PLR0912
     """Main CLI entry point."""
     parser = create_parser()
     parsed_args = parser.parse_args(args)
@@ -191,6 +200,8 @@ def main(args: list[str] | None = None) -> int:
             return experiment_cmd.execute(parsed_args)
         if parsed_args.command == "triage":
             return triage_cmd.execute(parsed_args)
+        if parsed_args.command == "status":
+            return status_cmd.execute(parsed_args)
         print(f"Unknown command: {parsed_args.command}")
         return 1
 

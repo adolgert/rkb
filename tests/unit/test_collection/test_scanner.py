@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import rkb.collection.scanner as scanner_module
 from rkb.collection.scanner import scan_pdf_files
 
 
@@ -38,3 +39,18 @@ def test_scan_pdf_files_raises_for_non_directory(tmp_path):
     with pytest.raises(NotADirectoryError):
         scan_pdf_files([Path(pdf_path)])
 
+
+def test_scan_pdf_files_ignores_walk_permission_errors(tmp_path, monkeypatch):
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    accessible = inbox / "good.pdf"
+    accessible.write_bytes(b"ok")
+
+    def fake_walk(_path, onerror):
+        onerror(PermissionError("blocked subdirectory"))
+        yield str(inbox), [], ["good.pdf"]
+
+    monkeypatch.setattr(scanner_module.os, "walk", fake_walk)
+
+    scanned = scan_pdf_files([inbox])
+    assert scanned == [accessible.resolve()]

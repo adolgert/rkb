@@ -15,10 +15,12 @@ from rkb.collection.scanner import scan_pdf_files
 from rkb.collection.zotero_sync import scan_zotero_hashes, sync_batch_to_zotero
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
     from pathlib import Path
 
     from rkb.collection.config import CollectionConfig
+
+_PROGRESS_THRESHOLD = 10
 
 
 @dataclass
@@ -155,6 +157,57 @@ def _record_global_zotero_failure(
         _record_failure(summary, canonical_path, message)
 
 
+def _iter_paths_with_progress(paths: list[Path], description: str):
+    if len(paths) <= _PROGRESS_THRESHOLD:
+        return paths
+
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        return paths
+
+    return tqdm(paths, desc=description, unit="file")
+
+
+def _iter_hashes_with_progress(hashes: list[str], description: str):
+    if len(hashes) <= _PROGRESS_THRESHOLD:
+        return hashes
+
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        return hashes
+
+    return tqdm(hashes, desc=description, unit="file")
+
+
+def _build_zotero_progress_callback(
+    total: int,
+) -> tuple[Callable[[dict], None] | None, Callable[[], None]]:
+    if total <= _PROGRESS_THRESHOLD:
+        return None, lambda: None
+
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        return None, lambda: None
+
+    progress = tqdm(total=total, desc="Rectify Zotero sync", unit="file")
+
+    def callback(_event: dict) -> None:
+        progress.update(1)
+
+    def close() -> None:
+        progress.close()
+
+    return callback, close
+
+
+def _validate_non_empty_pdf(path: Path) -> None:
+    if path.stat().st_size == 0:
+        raise ValueError(f"Zero-byte PDF: {path}")
+
+
 def rectify_collection(  # noqa: PLR0912
     *,
     scan_directories: list[Path],
@@ -171,8 +224,9 @@ def rectify_collection(  # noqa: PLR0912
     )
 
     discovered_by_hash: dict[str, list[Path]] = {}
-    for path in discovered_paths:
+    for path in _iter_paths_with_progress(discovered_paths, "Rectify hash scan"):
         try:
+            _validate_non_empty_pdf(path)
             content_sha256 = hash_file_sha256(path)
             discovered_by_hash.setdefault(content_sha256, []).append(path)
         except Exception as error:
@@ -229,7 +283,10 @@ def rectify_collection(  # noqa: PLR0912
                 copy_plan.setdefault(content_sha256, source_path)
 
             # Forward gap (scanned sources -> canonical store)
-            for content_sha256 in sorted(copy_plan):
+            copy_hashes = sorted(copy_plan)
+            for content_sha256 in _iter_hashes_with_progress(
+                copy_hashes, "Rectify canonical copy"
+            ):
                 source_path = copy_plan[content_sha256]
                 try:
                     stored_path = store_pdf(
@@ -312,13 +369,20 @@ def rectify_collection(  # noqa: PLR0912
             if not report and not dry_run and to_import:
                 try:
                     zot_client = _build_zotero_client(config)
-                    zot_summary = sync_batch_to_zotero(
-                        hashes_to_import=to_import,
-                        catalog=write_catalog,
-                        library_root=config.library_root,
-                        zot=zot_client,
-                        zotero_hashes=zotero_hashes,
+                    progress_callback, close_progress = _build_zotero_progress_callback(
+                        len(to_import)
                     )
+                    try:
+                        zot_summary = sync_batch_to_zotero(
+                            hashes_to_import=to_import,
+                            catalog=write_catalog,
+                            library_root=config.library_root,
+                            zot=zot_client,
+                            zotero_hashes=zotero_hashes,
+                            progress_callback=progress_callback,
+                        )
+                    finally:
+                        close_progress()
                     summary.imported_to_zotero += zot_summary["imported"]
                     _append_zotero_failures_for_hashes(
                         summary=summary,

@@ -77,6 +77,32 @@ def test_catalog_unlinked_and_statistics():
     assert stats["unlinked_to_zotero"] == 1
 
 
+def test_catalog_status_helpers_and_recent_log():
+    catalog = Catalog(db_path=":memory:")  # type: ignore[arg-type]
+    catalog.initialize()
+    h1 = "3" * 64
+    h2 = "4" * 64
+    h3 = "5" * 64
+
+    catalog.add_canonical_file(h1, "/tmp/one.pdf", "One.pdf", "one.pdf", 1, 100)
+    catalog.add_canonical_file(h2, "/tmp/two.pdf", "Two.pdf", "two.pdf", 1, 200)
+    catalog.add_canonical_file(h3, "/tmp/three.pdf", "Three.pdf", "three.pdf", 1, 300)
+
+    catalog.set_zotero_link(h1, "ITEM1", "imported")
+    catalog.set_zotero_link(h2, None, "pending")
+    catalog.log_action(h1, "ingested", "/inbox/one.pdf", "ok")
+    catalog.log_action(h2, "failed", "/inbox/two.pdf", "no space")
+
+    assert catalog.get_zotero_linked_count() == 1
+    assert catalog.get_canonical_store_bytes() == 600
+    assert catalog.get_unlinked_to_zotero() == [h2, h3]
+
+    recent = catalog.get_recent_ingest_log(limit=1)
+    assert len(recent) == 1
+    assert recent[0]["content_sha256"] == h2
+    assert recent[0]["action"] == "failed"
+
+
 def test_round_trip_hash_store_catalog_query(tmp_path):
     library_root = tmp_path / "library"
     db_path = library_root / "db" / "pdf_catalog.db"
@@ -102,4 +128,3 @@ def test_round_trip_hash_store_catalog_query(tmp_path):
     assert row is not None
     assert row["canonical_path"] == str(stored_path)
     assert catalog.is_known(content_hash)
-

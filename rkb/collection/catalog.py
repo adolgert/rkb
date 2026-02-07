@@ -200,7 +200,7 @@ class Catalog:
                 LEFT JOIN zotero_links AS z
                     ON z.content_sha256 = c.content_sha256
                 WHERE z.content_sha256 IS NULL
-                   OR z.status = 'failed'
+                   OR z.status IN ('failed', 'pending')
                 ORDER BY c.content_sha256
             """
         ).fetchall()
@@ -263,3 +263,37 @@ class Catalog:
             "SELECT content_sha256 FROM canonical_files ORDER BY content_sha256"
         ).fetchall()
         return [row["content_sha256"] for row in rows]
+
+    def get_zotero_linked_count(self) -> int:
+        """Return number of canonical files successfully linked in Zotero."""
+        row = self._connect().execute(
+            """
+                SELECT COUNT(*) AS count
+                FROM canonical_files AS c
+                JOIN zotero_links AS z
+                    ON z.content_sha256 = c.content_sha256
+                WHERE z.status IN ('imported', 'pre-existing')
+            """
+        ).fetchone()
+        return int(row["count"]) if row else 0
+
+    def get_canonical_store_bytes(self) -> int:
+        """Return total byte size represented in canonical_files."""
+        row = self._connect().execute(
+            "SELECT COALESCE(SUM(file_size_bytes), 0) AS total FROM canonical_files"
+        ).fetchone()
+        return int(row["total"]) if row and row["total"] is not None else 0
+
+    def get_recent_ingest_log(self, *, limit: int = 10) -> list[dict]:
+        """Return recent ingest_log rows in reverse chronological order."""
+        safe_limit = max(1, int(limit))
+        rows = self._connect().execute(
+            """
+                SELECT log_id, content_sha256, action, source_path, detail, timestamp
+                FROM ingest_log
+                ORDER BY log_id DESC
+                LIMIT ?
+            """,
+            (safe_limit,),
+        ).fetchall()
+        return [dict(row) for row in rows]

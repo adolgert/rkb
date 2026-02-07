@@ -150,3 +150,23 @@ def test_rectify_zotero_setup_failure_marks_files_failed(tmp_path):
     assert summary.failed == 2
     assert len(summary.failures) == 2
     assert all("zotero setup error" in failure.error for failure in summary.failures)
+
+
+def test_rectify_zero_byte_pdf_is_failure_and_continues(tmp_path):
+    config = _config_for_tmp(tmp_path)
+    scan_dir = tmp_path / "scan"
+    scan_dir.mkdir()
+    (scan_dir / "empty.pdf").write_bytes(b"")
+    (scan_dir / "valid.pdf").write_bytes(b"valid")
+
+    summary = rectify_collection(
+        scan_directories=[scan_dir],
+        config=config,
+        skip_zotero=True,
+    )
+
+    assert summary.total_files_found == 2
+    assert summary.unique_pdfs == 1
+    assert summary.copied_to_canonical == 1
+    assert summary.failed == 1
+    assert any("Zero-byte PDF" in failure.error for failure in summary.failures)

@@ -170,3 +170,24 @@ def test_ingest_zotero_setup_failure_marks_files_failed(tmp_path):
     assert summary.new == 1
     assert summary.failed == 1
     assert any("zotero setup error" in failure.error for failure in summary.failures)
+
+
+def test_ingest_zero_byte_pdf_is_failure_and_continues(tmp_path):
+    config = _config_for_tmp(tmp_path)
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "empty.pdf").write_bytes(b"")
+    (inbox / "valid.pdf").write_bytes(b"valid bytes")
+
+    summary = ingest_directories(
+        directories=[inbox],
+        config=config,
+        dry_run=False,
+        skip_zotero=True,
+        no_display_name=True,
+    )
+
+    assert summary.scanned == 2
+    assert summary.new == 1
+    assert summary.failed == 1
+    assert any("Zero-byte PDF" in failure.error for failure in summary.failures)
