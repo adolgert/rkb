@@ -113,3 +113,60 @@ def test_ingest_continues_after_file_failure(monkeypatch, tmp_path):
     assert len(summary.failures) == 1
     assert summary.failures[0].path.endswith("bad.pdf")
     assert "cannot read hash" in summary.failures[0].error
+
+
+def test_ingest_with_zotero_sync_updates_summary(monkeypatch, tmp_path):
+    config = _config_for_tmp(tmp_path)
+    config.zotero_library_id = "12345"
+    config.zotero_api_key = "token"
+
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    pdf_path = inbox / "paper.pdf"
+    pdf_path.write_bytes(b"paper bytes")
+
+    calls: dict[str, list] = {"hashes": []}
+
+    monkeypatch.setattr(ingest_module, "scan_zotero_hashes", lambda _path: {})
+    monkeypatch.setattr(ingest_module, "_build_zotero_client", lambda _cfg: object())
+
+    def fake_sync_batch_to_zotero(**kwargs):
+        calls["hashes"].append(kwargs["hashes_to_import"])
+        return {"imported": 1, "skipped": 0, "failed": 0}
+
+    monkeypatch.setattr(ingest_module, "sync_batch_to_zotero", fake_sync_batch_to_zotero)
+
+    summary = ingest_directories(
+        directories=[inbox],
+        config=config,
+        dry_run=False,
+        skip_zotero=False,
+        no_display_name=True,
+    )
+
+    assert summary.new == 1
+    assert summary.zotero_imported == 1
+    assert summary.zotero_existing == 0
+    assert summary.failed == 0
+    assert len(calls["hashes"]) == 1
+    assert len(calls["hashes"][0]) == 1
+
+
+def test_ingest_zotero_setup_failure_marks_files_failed(tmp_path):
+    config = _config_for_tmp(tmp_path)
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    pdf_path = inbox / "paper.pdf"
+    pdf_path.write_bytes(b"paper bytes")
+
+    summary = ingest_directories(
+        directories=[inbox],
+        config=config,
+        dry_run=False,
+        skip_zotero=False,
+        no_display_name=True,
+    )
+
+    assert summary.new == 1
+    assert summary.failed == 1
+    assert any("zotero setup error" in failure.error for failure in summary.failures)

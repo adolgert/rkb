@@ -10,6 +10,7 @@ from . import (
     ingest_cmd,
     pipeline_cmd,
     project_cmd,
+    rectify_cmd,
     search_cmd,
     triage_cmd,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "ingest_cmd",
     "pipeline_cmd",
     "project_cmd",
+    "rectify_cmd",
     "search_cmd",
     "triage_cmd",
 ]

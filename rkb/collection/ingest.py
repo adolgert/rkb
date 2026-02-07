@@ -11,8 +11,10 @@ from rkb.collection.catalog import Catalog
 from rkb.collection.display_name import generate_display_name
 from rkb.collection.hashing import hash_file_sha256
 from rkb.collection.scanner import scan_pdf_files
+from rkb.collection.zotero_sync import scan_zotero_hashes, sync_batch_to_zotero
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from pathlib import Path
 
     from rkb.collection.config import CollectionConfig
@@ -77,6 +79,65 @@ def _catalog_is_known(catalog: Catalog, content_sha256: str) -> bool:
         return False
 
 
+def _build_zotero_client(config: CollectionConfig) -> object:
+    """Create a pyzotero client from collection configuration."""
+    if not config.zotero_library_id:
+        raise RuntimeError("Missing Zotero credential: ZOTERO_LIBRARY_ID")
+    if not config.zotero_api_key:
+        raise RuntimeError("Missing Zotero credential: ZOTERO_API_KEY")
+
+    try:
+        from pyzotero import zotero
+    except ImportError as error:
+        raise RuntimeError("pyzotero is required. Install the `zotero` extra.") from error
+
+    return zotero.Zotero(
+        config.zotero_library_id,
+        config.zotero_library_type,
+        config.zotero_api_key,
+    )
+
+
+def _record_global_zotero_failure(
+    *,
+    catalog: Catalog,
+    content_hashes: Iterable[str],
+    error: Exception,
+    summary: IngestSummary,
+) -> None:
+    """Mark a global Zotero setup failure for each newly ingested hash."""
+    message = f"zotero setup error: {error}"
+    for content_hash in content_hashes:
+        catalog.set_zotero_link(content_hash, None, "failed", error_message=str(error))
+        row = catalog.get_canonical_file(content_hash)
+        canonical_path = row["canonical_path"] if row else content_hash
+        catalog.log_action(content_hash, "failed", detail=message)
+        summary.failed += 1
+        summary.failures.append(
+            IngestFailure(path=str(canonical_path), error=message)
+        )
+
+
+def _append_zotero_failures_for_hashes(
+    *,
+    catalog: Catalog,
+    content_hashes: Iterable[str],
+    summary: IngestSummary,
+) -> None:
+    """Append per-file Zotero failure details to ingest summary."""
+    for content_hash in content_hashes:
+        link_row = catalog.get_zotero_link(content_hash)
+        if not link_row or link_row["status"] != "failed":
+            continue
+
+        row = catalog.get_canonical_file(content_hash)
+        canonical_path = row["canonical_path"] if row else content_hash
+        error_message = link_row["error_message"] or "zotero import failed"
+        summary.failures.append(
+            IngestFailure(path=str(canonical_path), error=f"zotero: {error_message}")
+        )
+
+
 def ingest_directories(
     directories: list[Path],
     config: CollectionConfig,
@@ -86,10 +147,9 @@ def ingest_directories(
     no_display_name: bool = False,
 ) -> IngestSummary:
     """Ingest discovered PDFs into canonical storage and catalog."""
-    _ = skip_zotero  # Zotero sync is introduced in a later implementation phase.
-
     pdf_files = scan_pdf_files(directories)
     summary = IngestSummary(scanned=len(pdf_files))
+    newly_ingested_hashes: list[str] = []
 
     write_catalog = Catalog(config.catalog_db)
     lookup_catalog: Catalog | None = write_catalog
@@ -163,6 +223,7 @@ def ingest_directories(
                     detail=f"stored at {stored_path}",
                 )
                 summary.new += 1
+                newly_ingested_hashes.append(source_hash)
             except Exception as error:
                 summary.failed += 1
                 summary.failures.append(
@@ -175,6 +236,37 @@ def ingest_directories(
                         source_path=str(pdf_path),
                         detail=str(error),
                     )
+
+        if (
+            not dry_run
+            and not skip_zotero
+            and newly_ingested_hashes
+        ):
+            try:
+                zotero_hashes = scan_zotero_hashes(config.zotero_storage)
+                zot_client = _build_zotero_client(config)
+                zotero_summary = sync_batch_to_zotero(
+                    hashes_to_import=newly_ingested_hashes,
+                    catalog=write_catalog,
+                    library_root=config.library_root,
+                    zot=zot_client,
+                    zotero_hashes=zotero_hashes,
+                )
+                summary.zotero_imported += zotero_summary["imported"]
+                summary.zotero_existing += zotero_summary["skipped"]
+                summary.failed += zotero_summary["failed"]
+                _append_zotero_failures_for_hashes(
+                    catalog=write_catalog,
+                    content_hashes=newly_ingested_hashes,
+                    summary=summary,
+                )
+            except Exception as error:
+                _record_global_zotero_failure(
+                    catalog=write_catalog,
+                    content_hashes=newly_ingested_hashes,
+                    error=error,
+                    summary=summary,
+                )
     finally:
         if lookup_catalog is not None and lookup_catalog is not write_catalog:
             lookup_catalog.close()

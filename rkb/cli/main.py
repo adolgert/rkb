@@ -15,6 +15,7 @@ from rkb.cli.commands import (
     ingest_cmd,
     pipeline_cmd,
     project_cmd,
+    rectify_cmd,
     search_cmd,
     triage_cmd,
 )
@@ -105,6 +106,14 @@ Examples:
     )
     ingest_cmd.add_arguments(ingest_parser)
 
+    # Rectify command
+    rectify_parser = subparsers.add_parser(
+        "rectify",
+        help="Reconcile scattered PDFs into canonical store and Zotero",
+        description="Run one-time bidirectional reconciliation of PDF collections",
+    )
+    rectify_cmd.add_arguments(rectify_parser)
+
     # Extract command
     extract_parser = subparsers.add_parser(
         "extract",
@@ -172,6 +181,8 @@ def main(args: list[str] | None = None) -> int:
             return find_cmd.execute(parsed_args)
         if parsed_args.command == "ingest":
             return ingest_cmd.execute(parsed_args)
+        if parsed_args.command == "rectify":
+            return rectify_cmd.execute(parsed_args)
         if parsed_args.command == "extract":
             return extract_cmd.execute(parsed_args)
         if parsed_args.command == "project":

@@ -206,6 +206,14 @@ class Catalog:
         ).fetchall()
         return [row["content_sha256"] for row in rows]
 
+    def get_zotero_link(self, content_sha256: str) -> dict | None:
+        """Return one zotero_links row by content hash, if present."""
+        row = self._connect().execute(
+            "SELECT * FROM zotero_links WHERE content_sha256 = ?",
+            (content_sha256,),
+        ).fetchone()
+        return dict(row) if row else None
+
     def log_action(
         self,
         content_sha256: str,
@@ -248,3 +256,10 @@ class Catalog:
             "ingest_log": log_count,
             "unlinked_to_zotero": len(self.get_unlinked_to_zotero()),
         }
+
+    def list_canonical_hashes(self) -> list[str]:
+        """Return all canonical file hashes in ascending order."""
+        rows = self._connect().execute(
+            "SELECT content_sha256 FROM canonical_files ORDER BY content_sha256"
+        ).fetchall()
+        return [row["content_sha256"] for row in rows]
