@@ -26,6 +26,12 @@ class Catalog:
             self._connection.row_factory = sqlite3.Row
         return self._connection
 
+    def close(self) -> None:
+        """Close underlying database connection, if open."""
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
+
     def initialize(self) -> None:
         """Create catalog tables if they do not already exist."""
         if str(self.db_path) != ":memory:":

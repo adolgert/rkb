@@ -12,6 +12,7 @@ from rkb.cli.commands import (
     extract_cmd,
     find_cmd,
     index_cmd,
+    ingest_cmd,
     pipeline_cmd,
     project_cmd,
     search_cmd,
@@ -95,6 +96,14 @@ Examples:
     )
     find_cmd.add_arguments(find_parser)
 
+    # Ingest command
+    ingest_parser = subparsers.add_parser(
+        "ingest",
+        help="Ingest PDFs into canonical content-addressed storage",
+        description="Scan one or more directories and ingest discovered PDFs",
+    )
+    ingest_cmd.add_arguments(ingest_parser)
+
     # Extract command
     extract_parser = subparsers.add_parser(
         "extract",
@@ -152,6 +161,8 @@ def main(args: list[str] | None = None) -> int:
             return index_cmd.execute(parsed_args)
         if parsed_args.command == "find":
             return find_cmd.execute(parsed_args)
+        if parsed_args.command == "ingest":
+            return ingest_cmd.execute(parsed_args)
         if parsed_args.command == "extract":
             return extract_cmd.execute(parsed_args)
         if parsed_args.command == "project":
