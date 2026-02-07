@@ -77,7 +77,7 @@ def _print_human_summary(summary: dict) -> None:
 def execute(args: argparse.Namespace) -> int:
     """Execute the rectify command."""
     try:
-        config = CollectionConfig.load(config_path=args.config)
+        config = CollectionConfig.load(config_path=getattr(args, "config", None))
         summary = rectify_collection(
             scan_directories=args.scan,
             config=config,
@@ -96,7 +96,7 @@ def execute(args: argparse.Namespace) -> int:
         return 1
     except Exception as error:
         print(f"Rectify failed: {error}")
-        if args.verbose:
+        if getattr(args, "verbose", False):
             import traceback
 
             traceback.print_exc()

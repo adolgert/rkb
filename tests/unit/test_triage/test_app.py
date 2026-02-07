@@ -95,3 +95,35 @@ def test_triage_app_remembers_decision_when_file_reappears(tmp_path):
     assert review.status_code == 200
     assert b"Decision: approved" in review.data
 
+
+def test_triage_app_recursive_scan_can_be_enabled(tmp_path):
+    downloads_dir = tmp_path / "downloads"
+    staging_dir = tmp_path / "staging"
+    nested_dir = downloads_dir / "nested"
+    downloads_dir.mkdir()
+    staging_dir.mkdir()
+    nested_dir.mkdir()
+
+    nested_pdf = nested_dir / "nested.pdf"
+    nested_pdf.write_bytes(b"nested bytes")
+
+    default_app = create_app(
+        downloads_dir=downloads_dir,
+        staging_dir=staging_dir,
+        db_path=staging_dir / "default.db",
+    )
+    default_client = default_app.test_client()
+    default_review = default_client.get("/")
+    assert default_review.status_code == 200
+    assert b"nested.pdf" not in default_review.data
+
+    recursive_app = create_app(
+        downloads_dir=downloads_dir,
+        staging_dir=staging_dir,
+        db_path=staging_dir / "recursive.db",
+        recursive_scan=True,
+    )
+    recursive_client = recursive_app.test_client()
+    recursive_review = recursive_client.get("/")
+    assert recursive_review.status_code == 200
+    assert b"nested.pdf" in recursive_review.data

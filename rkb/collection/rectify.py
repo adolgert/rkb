@@ -10,7 +10,7 @@ from rkb.collection.canonical_store import canonical_dir, is_stored, store_pdf
 from rkb.collection.catalog import Catalog
 from rkb.collection.display_name import generate_display_name
 from rkb.collection.hashing import hash_file_sha256
-from rkb.collection.ingest import _build_zotero_client, _get_page_count
+from rkb.collection.runtime import build_zotero_client, get_page_count
 from rkb.collection.scanner import scan_pdf_files
 from rkb.collection.zotero_sync import scan_zotero_hashes, sync_batch_to_zotero
 
@@ -101,7 +101,7 @@ def _ensure_catalog_entry(
     source_path: Path,
 ) -> None:
     if not _catalog_is_known(catalog, content_sha256):
-        page_count = _get_page_count(canonical_path)
+        page_count = get_page_count(canonical_path)
         catalog.add_canonical_file(
             content_sha256=content_sha256,
             canonical_path=str(canonical_path),
@@ -294,6 +294,7 @@ def rectify_collection(  # noqa: PLR0912
                         source_path,
                         content_sha256,
                         generate_display_name(source_path),
+                        verify_source=False,
                     )
                     _ensure_catalog_entry(
                         catalog=write_catalog,
@@ -368,7 +369,7 @@ def rectify_collection(  # noqa: PLR0912
 
             if not report and not dry_run and to_import:
                 try:
-                    zot_client = _build_zotero_client(config)
+                    zot_client = build_zotero_client(config)
                     progress_callback, close_progress = _build_zotero_progress_callback(
                         len(to_import)
                     )

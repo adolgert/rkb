@@ -38,12 +38,18 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Rebuild staging directory from triage decisions and exit",
     )
+    parser.add_argument(
+        "--recursive",
+        action="store_true",
+        default=False,
+        help="Scan downloads recursively",
+    )
 
 
 def execute(args: argparse.Namespace) -> int:
     """Execute the triage command."""
     try:
-        config = CollectionConfig.load(config_path=args.config)
+        config = CollectionConfig.load(config_path=getattr(args, "config", None))
         downloads_dir = (args.downloads or config.work_downloads).expanduser()
         staging_dir = (args.staging or config.box_staging).expanduser()
         db_path = staging_dir / "triage.db"
@@ -58,13 +64,18 @@ def execute(args: argparse.Namespace) -> int:
             print(f"  Missing source: {summary['missing_source']}")
             return 0
 
-        app = create_app(downloads_dir=downloads_dir, staging_dir=staging_dir, db_path=db_path)
+        app = create_app(
+            downloads_dir=downloads_dir,
+            staging_dir=staging_dir,
+            db_path=db_path,
+            recursive_scan=args.recursive,
+        )
         print(f"Triage app running at http://127.0.0.1:{args.port}")
         app.run(host="127.0.0.1", port=args.port, debug=False)
         return 0
     except Exception as error:
         print(f"Triage failed: {error}")
-        if args.verbose:
+        if getattr(args, "verbose", False):
             import traceback
 
             traceback.print_exc()

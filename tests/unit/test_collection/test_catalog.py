@@ -29,6 +29,22 @@ def test_catalog_crud_in_memory():
     assert row["display_name"] == "File.pdf"
 
 
+def test_catalog_supports_context_manager(tmp_path):
+    db_path = tmp_path / "catalog.sqlite"
+    with Catalog(db_path=db_path) as catalog:
+        catalog.initialize()
+        content_hash = "f" * 64
+        catalog.add_canonical_file(
+            content_sha256=content_hash,
+            canonical_path="/tmp/context.pdf",
+            display_name="Context.pdf",
+            original_filename="context.pdf",
+            page_count=1,
+            file_size_bytes=10,
+        )
+        assert catalog.is_known(content_hash)
+
+
 def test_catalog_duplicate_hash_raises():
     catalog = Catalog(db_path=":memory:")  # type: ignore[arg-type]
     catalog.initialize()

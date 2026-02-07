@@ -128,7 +128,7 @@ def test_ingest_with_zotero_sync_updates_summary(monkeypatch, tmp_path):
     calls: dict[str, list] = {"hashes": []}
 
     monkeypatch.setattr(ingest_module, "scan_zotero_hashes", lambda _path: {})
-    monkeypatch.setattr(ingest_module, "_build_zotero_client", lambda _cfg: object())
+    monkeypatch.setattr(ingest_module, "build_zotero_client", lambda _cfg: object())
 
     def fake_sync_batch_to_zotero(**kwargs):
         calls["hashes"].append(kwargs["hashes_to_import"])

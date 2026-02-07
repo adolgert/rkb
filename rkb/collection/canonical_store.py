@@ -51,6 +51,8 @@ def store_pdf(
     source_path: Path,
     content_sha256: str,
     display_name: str,
+    *,
+    verify_source: bool = True,
 ) -> Path:
     """Copy a PDF into canonical storage and verify byte-level integrity."""
     normalized = _normalize_sha256(content_sha256)
@@ -59,9 +61,10 @@ def store_pdf(
     if not source_path.is_file():
         raise ValueError(f"Expected source_path to be a file: {source_path}")
 
-    source_hash = hash_file_sha256(source_path)
-    if source_hash != normalized:
-        raise ValueError("Provided content_sha256 does not match source file bytes")
+    if verify_source:
+        source_hash = hash_file_sha256(source_path)
+        if source_hash != normalized:
+            raise ValueError("Provided content_sha256 does not match source file bytes")
 
     hash_dir = canonical_dir(library_root, normalized)
     hash_dir.mkdir(parents=True, exist_ok=True)

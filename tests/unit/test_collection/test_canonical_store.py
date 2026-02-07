@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import rkb.collection.canonical_store as canonical_store_module
 from rkb.collection.canonical_store import canonical_dir, is_stored, store_pdf
 from rkb.collection.hashing import hash_file_sha256
 
@@ -43,3 +44,30 @@ def test_store_pdf_rejects_wrong_hash(tmp_path):
 
     with pytest.raises(ValueError, match="does not match"):
         store_pdf(library_root, source_path, wrong_hash, "Name.pdf")
+
+
+def test_store_pdf_can_skip_source_verification_for_trusted_hash(monkeypatch, tmp_path):
+    library_root = tmp_path / "library"
+    source_path = tmp_path / "source.pdf"
+    source_path.write_bytes(b"pdf payload")
+    content_hash = hash_file_sha256(source_path)
+
+    calls: list[Path] = []
+    original_hash = canonical_store_module.hash_file_sha256
+
+    def tracking_hash(path: Path) -> str:
+        calls.append(path)
+        return original_hash(path)
+
+    monkeypatch.setattr(canonical_store_module, "hash_file_sha256", tracking_hash)
+
+    stored = store_pdf(
+        library_root,
+        source_path,
+        content_hash,
+        "Trusted.pdf",
+        verify_source=False,
+    )
+
+    assert stored.exists()
+    assert source_path not in calls

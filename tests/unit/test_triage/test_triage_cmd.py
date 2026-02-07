@@ -19,6 +19,7 @@ def test_triage_cmd_rebuild_staging(monkeypatch, tmp_path, capsys):
         downloads=None,
         staging=None,
         rebuild_staging=True,
+        recursive=False,
         config=None,
         verbose=False,
     )
@@ -27,4 +28,3 @@ def test_triage_cmd_rebuild_staging(monkeypatch, tmp_path, capsys):
     output = capsys.readouterr().out
     assert exit_code == 0
     assert "Rebuild complete" in output
-

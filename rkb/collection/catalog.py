@@ -6,6 +6,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Self
 
 
 def _utc_now_iso() -> str:
@@ -18,6 +19,12 @@ class Catalog:
 
     db_path: Path | str
     _connection: sqlite3.Connection | None = None
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, _exc_type, _exc, _tb) -> None:
+        self.close()
 
     def _connect(self) -> sqlite3.Connection:
         if self._connection is None:

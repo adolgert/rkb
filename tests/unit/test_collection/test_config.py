@@ -67,3 +67,26 @@ def test_config_file_used_and_env_takes_precedence(monkeypatch, tmp_path):
     assert config.catalog_db == Path("/yaml/library/db/catalog.sqlite")
     assert config.machine_id == "env-machine"
     assert config.zotero_library_type == "group"
+
+
+def test_config_loads_library_root_config_yaml(monkeypatch, tmp_path):
+    library_root = tmp_path / "library"
+    library_root.mkdir(parents=True)
+    config_file = library_root / "config.yaml"
+    config_file.write_text(
+        (
+            "catalog_db: /yaml/library/db/primary.sqlite\n"
+            "machine_id: yaml-primary-machine\n"
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("PDF_LIBRARY_ROOT", str(library_root))
+    monkeypatch.delenv("PDF_MACHINE_ID", raising=False)
+    monkeypatch.delenv("PDF_CATALOG_DB", raising=False)
+
+    config = CollectionConfig.load()
+
+    assert config.library_root == library_root
+    assert config.catalog_db == Path("/yaml/library/db/primary.sqlite")
+    assert config.machine_id == "yaml-primary-machine"

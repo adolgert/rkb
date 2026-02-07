@@ -10,6 +10,7 @@ from rkb.collection.canonical_store import is_stored, store_pdf
 from rkb.collection.catalog import Catalog
 from rkb.collection.display_name import generate_display_name
 from rkb.collection.hashing import hash_file_sha256
+from rkb.collection.runtime import build_zotero_client, get_page_count
 from rkb.collection.scanner import scan_pdf_files
 from rkb.collection.zotero_sync import scan_zotero_hashes, sync_batch_to_zotero
 
@@ -59,45 +60,12 @@ class IngestSummary:
         return 2 if self.failed > 0 else 0
 
 
-def _get_page_count(pdf_path: Path) -> int | None:
-    """Best-effort page count extraction. Failure is non-fatal."""
-    try:
-        from pypdf import PdfReader
-    except ImportError:
-        return None
-
-    try:
-        reader = PdfReader(str(pdf_path))
-        return len(reader.pages)
-    except Exception:
-        return None
-
-
 def _catalog_is_known(catalog: Catalog, content_sha256: str) -> bool:
     """Check hash presence, tolerating absent tables for dry-run mode."""
     try:
         return catalog.is_known(content_sha256)
     except sqlite3.OperationalError:
         return False
-
-
-def _build_zotero_client(config: CollectionConfig) -> object:
-    """Create a pyzotero client from collection configuration."""
-    if not config.zotero_library_id:
-        raise RuntimeError("Missing Zotero credential: ZOTERO_LIBRARY_ID")
-    if not config.zotero_api_key:
-        raise RuntimeError("Missing Zotero credential: ZOTERO_API_KEY")
-
-    try:
-        from pyzotero import zotero
-    except ImportError as error:
-        raise RuntimeError("pyzotero is required. Install the `zotero` extra.") from error
-
-    return zotero.Zotero(
-        config.zotero_library_id,
-        config.zotero_library_type,
-        config.zotero_api_key,
-    )
 
 
 def _record_global_zotero_failure(
@@ -228,7 +196,7 @@ def ingest_directories(
                         )
                     continue
 
-                page_count = _get_page_count(pdf_path)
+                page_count = get_page_count(pdf_path)
                 display_name = (
                     pdf_path.name
                     if no_display_name
@@ -244,6 +212,7 @@ def ingest_directories(
                     pdf_path,
                     source_hash,
                     display_name,
+                    verify_source=False,
                 )
                 write_catalog.add_canonical_file(
                     content_sha256=source_hash,
@@ -286,7 +255,7 @@ def ingest_directories(
         ):
             try:
                 zotero_hashes = scan_zotero_hashes(config.zotero_storage)
-                zot_client = _build_zotero_client(config)
+                zot_client = build_zotero_client(config)
                 progress_callback, close_progress = _build_zotero_progress_callback(
                     len(newly_ingested_hashes)
                 )
