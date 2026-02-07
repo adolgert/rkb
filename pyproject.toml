@@ -52,6 +52,9 @@ api = [
     "openai>=1.0.0",
     "anthropic>=0.5.0",
 ]
+zotero = [
+    "pyzotero>=1.6.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -64,7 +67,7 @@ dev = [
     "pre-commit>=3.0.0",
 ]
 all = [
-    "rkb[nougat,pdf,latex,api,dev]"
+    "rkb[nougat,pdf,latex,api,zotero,dev]"
 ]
 
 [project.scripts]
