@@ -127,6 +127,7 @@ forbidden_modules = [
     "rkb.extractors",
     "rkb.embedders",
     "rkb.cli",
+    "rkb.collection",
 ]
 
 # Processing layers cannot import from services or CLI
@@ -142,6 +143,19 @@ name = "Services isolation from CLI"
 type = "forbidden"
 source_modules = ["rkb.services"]
 forbidden_modules = ["rkb.cli"]
+
+# Collection layer: can import from core, not from higher layers.
+[[tool.importlinter.contracts]]
+name = "Collection layer isolation"
+type = "forbidden"
+source_modules = ["rkb.collection"]
+forbidden_modules = [
+    "rkb.services",
+    "rkb.pipelines",
+    "rkb.extractors",
+    "rkb.embedders",
+    "rkb.cli",
+]
 
 # Prevent circular dependencies within same layer
 [[tool.importlinter.contracts]]
