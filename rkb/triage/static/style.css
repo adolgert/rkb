@@ -1,0 +1,109 @@
+body {
+  background: #f6f3ee;
+  color: #1f2a30;
+  font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+  margin: 0;
+}
+
+.site-header {
+  align-items: center;
+  background: linear-gradient(120deg, #efe6d5 0%, #d7e5ea 100%);
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+}
+
+.site-header h1 {
+  margin: 0;
+}
+
+.site-header nav a {
+  color: #1f2a30;
+  font-weight: 600;
+  margin-left: 1rem;
+  text-decoration: none;
+}
+
+main {
+  margin: 0 auto;
+  max-width: 1100px;
+  padding: 1rem;
+}
+
+.filters a {
+  border: 1px solid #8d9ca3;
+  border-radius: 999px;
+  color: #1f2a30;
+  display: inline-block;
+  margin-right: 0.4rem;
+  padding: 0.25rem 0.75rem;
+  text-decoration: none;
+}
+
+.filters a.active {
+  background: #1f2a30;
+  color: #fff;
+}
+
+.card-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.pdf-card {
+  background: #fff;
+  border: 1px solid #d7d9dc;
+  border-radius: 10px;
+  padding: 0.8rem;
+}
+
+.decision.approved {
+  color: #1b7f3a;
+}
+
+.decision.rejected {
+  color: #b53131;
+}
+
+.decision.undecided {
+  color: #666;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+button {
+  background: #ece8df;
+  border: 1px solid #bcb6a9;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0.4rem 0.6rem;
+}
+
+.page-preview {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.page-preview img {
+  border: 1px solid #ddd;
+  max-width: 100%;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  border: 1px solid #d7d9dc;
+  padding: 0.4rem;
+  text-align: left;
+}
+

@@ -16,6 +16,7 @@ from rkb.cli.commands import (
     pipeline_cmd,
     project_cmd,
     search_cmd,
+    triage_cmd,
 )
 
 
@@ -128,6 +129,14 @@ Examples:
     )
     experiment_cmd.add_arguments(experiment_parser)
 
+    # Triage command
+    triage_parser = subparsers.add_parser(
+        "triage",
+        help="Launch local work-side PDF triage app",
+        description="Review PDFs from downloads and stage approved files",
+    )
+    triage_cmd.add_arguments(triage_parser)
+
     return parser
 
 
@@ -169,6 +178,8 @@ def main(args: list[str] | None = None) -> int:
             return project_cmd.execute(parsed_args)
         if parsed_args.command == "experiment":
             return experiment_cmd.execute(parsed_args)
+        if parsed_args.command == "triage":
+            return triage_cmd.execute(parsed_args)
         print(f"Unknown command: {parsed_args.command}")
         return 1
 

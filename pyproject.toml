@@ -55,6 +55,10 @@ api = [
 zotero = [
     "pyzotero>=1.6.0",
 ]
+triage = [
+    "flask>=3.0.0",
+    "pymupdf>=1.23.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -67,7 +71,7 @@ dev = [
     "pre-commit>=3.0.0",
 ]
 all = [
-    "rkb[nougat,pdf,latex,api,zotero,dev]"
+    "rkb[nougat,pdf,latex,api,zotero,triage,dev]"
 ]
 
 [project.scripts]
@@ -158,6 +162,18 @@ forbidden_modules = [
     "rkb.extractors",
     "rkb.embedders",
     "rkb.cli",
+]
+
+# Triage layer should stay independent from extraction/indexing stack.
+[[tool.importlinter.contracts]]
+name = "Triage layer isolation"
+type = "forbidden"
+source_modules = ["rkb.triage"]
+forbidden_modules = [
+    "rkb.services",
+    "rkb.pipelines",
+    "rkb.extractors",
+    "rkb.embedders",
 ]
 
 # Prevent circular dependencies within same layer

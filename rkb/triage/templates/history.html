@@ -1,0 +1,35 @@
+{% extends "layout.html" %}
+{% block title %}History | RKB Triage{% endblock %}
+{% block content %}
+<h2>Decision History</h2>
+<section class="filters">
+  <a class="{% if not decision_filter %}active{% endif %}" href="{{ url_for('history') }}">All</a>
+  <a class="{% if decision_filter == 'approved' %}active{% endif %}" href="{{ url_for('history', decision='approved') }}">Approved</a>
+  <a class="{% if decision_filter == 'rejected' %}active{% endif %}" href="{{ url_for('history', decision='rejected') }}">Rejected</a>
+</section>
+{% if history_rows %}
+  <table>
+    <thead>
+      <tr>
+        <th>Hash</th>
+        <th>Old</th>
+        <th>New</th>
+        <th>Changed At</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in history_rows %}
+        <tr>
+          <td><code>{{ row.content_sha256[:12] }}</code></td>
+          <td>{{ row.old_decision or 'none' }}</td>
+          <td>{{ row.new_decision }}</td>
+          <td>{{ row.changed_at }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>No history yet.</p>
+{% endif %}
+{% endblock %}
+

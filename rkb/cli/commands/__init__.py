@@ -11,6 +11,7 @@ from . import (
     pipeline_cmd,
     project_cmd,
     search_cmd,
+    triage_cmd,
 )
 
 __all__ = [
@@ -23,4 +24,5 @@ __all__ = [
     "pipeline_cmd",
     "project_cmd",
     "search_cmd",
+    "triage_cmd",
 ]
