@@ -12,9 +12,13 @@ from rkb.cli.commands import (
     extract_cmd,
     find_cmd,
     index_cmd,
+    ingest_cmd,
     pipeline_cmd,
     project_cmd,
+    rectify_cmd,
     search_cmd,
+    status_cmd,
+    triage_cmd,
 )
 
 
@@ -95,6 +99,22 @@ Examples:
     )
     find_cmd.add_arguments(find_parser)
 
+    # Ingest command
+    ingest_parser = subparsers.add_parser(
+        "ingest",
+        help="Ingest PDFs into canonical content-addressed storage",
+        description="Scan one or more directories and ingest discovered PDFs",
+    )
+    ingest_cmd.add_arguments(ingest_parser)
+
+    # Rectify command
+    rectify_parser = subparsers.add_parser(
+        "rectify",
+        help="Reconcile scattered PDFs into canonical store and Zotero",
+        description="Run one-time bidirectional reconciliation of PDF collections",
+    )
+    rectify_cmd.add_arguments(rectify_parser)
+
     # Extract command
     extract_parser = subparsers.add_parser(
         "extract",
@@ -119,10 +139,26 @@ Examples:
     )
     experiment_cmd.add_arguments(experiment_parser)
 
+    # Triage command
+    triage_parser = subparsers.add_parser(
+        "triage",
+        help="Launch local work-side PDF triage app",
+        description="Review PDFs from downloads and stage approved files",
+    )
+    triage_cmd.add_arguments(triage_parser)
+
+    # Status command
+    status_parser = subparsers.add_parser(
+        "status",
+        help="Show canonical collection and Zotero sync status",
+        description="Report canonical counts, Zotero coverage, and recent ingest activity",
+    )
+    status_cmd.add_arguments(status_parser)
+
     return parser
 
 
-def main(args: list[str] | None = None) -> int:
+def main(args: list[str] | None = None) -> int:  # noqa: PLR0912
     """Main CLI entry point."""
     parser = create_parser()
     parsed_args = parser.parse_args(args)
@@ -152,12 +188,20 @@ def main(args: list[str] | None = None) -> int:
             return index_cmd.execute(parsed_args)
         if parsed_args.command == "find":
             return find_cmd.execute(parsed_args)
+        if parsed_args.command == "ingest":
+            return ingest_cmd.execute(parsed_args)
+        if parsed_args.command == "rectify":
+            return rectify_cmd.execute(parsed_args)
         if parsed_args.command == "extract":
             return extract_cmd.execute(parsed_args)
         if parsed_args.command == "project":
             return project_cmd.execute(parsed_args)
         if parsed_args.command == "experiment":
             return experiment_cmd.execute(parsed_args)
+        if parsed_args.command == "triage":
+            return triage_cmd.execute(parsed_args)
+        if parsed_args.command == "status":
+            return status_cmd.execute(parsed_args)
         print(f"Unknown command: {parsed_args.command}")
         return 1
 

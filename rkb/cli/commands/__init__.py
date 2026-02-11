@@ -7,9 +7,13 @@ from . import (
     extract_cmd,
     find_cmd,
     index_cmd,
+    ingest_cmd,
     pipeline_cmd,
     project_cmd,
+    rectify_cmd,
     search_cmd,
+    status_cmd,
+    triage_cmd,
 )
 
 __all__ = [
@@ -18,7 +22,11 @@ __all__ = [
     "extract_cmd",
     "find_cmd",
     "index_cmd",
+    "ingest_cmd",
     "pipeline_cmd",
     "project_cmd",
+    "rectify_cmd",
     "search_cmd",
+    "status_cmd",
+    "triage_cmd",
 ]

@@ -1,0 +1,52 @@
+{% extends "layout.html" %}
+{% block title %}Review | RKB Triage{% endblock %}
+{% block content %}
+<section class="filters">
+  <a class="{% if decision_filter == 'all' %}active{% endif %}" href="{{ url_for('review', filter='all') }}">All</a>
+  <a class="{% if decision_filter == 'undecided' %}active{% endif %}" href="{{ url_for('review', filter='undecided') }}">Undecided</a>
+  <a class="{% if decision_filter == 'approved' %}active{% endif %}" href="{{ url_for('review', filter='approved') }}">Approved</a>
+  <a class="{% if decision_filter == 'rejected' %}active{% endif %}" href="{{ url_for('review', filter='rejected') }}">Rejected</a>
+</section>
+
+{% if files %}
+  <section class="card-grid">
+    {% for file in files %}
+      <article class="pdf-card">
+        <h3>{{ file.filename }}</h3>
+        <p>Hash: <code>{{ file.content_sha256[:12] }}</code></p>
+        <p>Size: {{ file.file_size_bytes }} bytes{% if file.page_count is not none %}, Pages: {{ file.page_count }}{% endif %}</p>
+        <p class="decision {{ file.decision }}" data-decision-for="{{ file.content_sha256 }}">Decision: {{ file.decision }}</p>
+        <div class="actions">
+          <button
+            class="decide-btn"
+            data-hash="{{ file.content_sha256 }}"
+            data-path="{{ file.path }}"
+            data-decision="approved"
+          >
+            Approve
+          </button>
+          <button
+            class="decide-btn"
+            data-hash="{{ file.content_sha256 }}"
+            data-path="{{ file.path }}"
+            data-decision="rejected"
+          >
+            Reject
+          </button>
+          <button
+            class="pages-btn"
+            data-hash="{{ file.content_sha256 }}"
+            data-path="{{ file.path }}"
+          >
+            Pages 1-2
+          </button>
+        </div>
+        <div class="page-preview" id="preview-{{ file.content_sha256 }}"></div>
+      </article>
+    {% endfor %}
+  </section>
+{% else %}
+  <p>No PDFs found for this filter.</p>
+{% endif %}
+{% endblock %}
+

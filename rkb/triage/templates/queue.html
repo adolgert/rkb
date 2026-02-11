@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+{% block title %}Queue | RKB Triage{% endblock %}
+{% block content %}
+<h2>Approved Queue</h2>
+{% if approved %}
+  <table>
+    <thead>
+      <tr>
+        <th>Filename</th>
+        <th>Source</th>
+        <th>Staged</th>
+        <th>Decided At</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in approved %}
+        <tr>
+          <td>{{ row.original_filename }}</td>
+          <td><code>{{ row.original_path }}</code></td>
+          <td><code>{{ row.staged_path or '' }}</code></td>
+          <td>{{ row.decided_at }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>No approved files currently staged.</p>
+{% endif %}
+{% endblock %}
+
