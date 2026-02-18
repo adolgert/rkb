@@ -39,17 +39,6 @@ def is_in_zotero(content_sha256: str, zotero_hashes: dict[str, Path]) -> bool:
     return content_sha256 in zotero_hashes
 
 
-def _extract_item_key(create_items_response: dict) -> str:
-    successful = create_items_response.get("successful", {})
-    first_success = successful.get("0", {})
-    item_key = first_success.get("key")
-    if not item_key:
-        raise RuntimeError(
-            f"Could not parse Zotero item key from response: {create_items_response}"
-        )
-    return item_key
-
-
 def _extract_attachment_key(attachment_response: dict) -> str | None:
     successful = attachment_response.get("successful", {})
     first_success = successful.get("0", {})
@@ -60,15 +49,18 @@ def import_to_zotero(
     canonical_pdf_path: Path,
     display_name: str,
     zot: object,
-) -> tuple[str, str | None]:
-    """Create a Zotero document item and attach a canonical PDF."""
-    template = zot.item_template("document")
-    template["title"] = display_name
-    created = zot.create_items([template])
-    item_key = _extract_item_key(created)
-    attachment = zot.attachment_simple([str(canonical_pdf_path)], item_key)
+) -> tuple[str | None, str | None]:
+    """Add a canonical PDF to Zotero as a standalone attachment.
+
+    Creating a standalone attachment (no parent item) allows the Zotero
+    desktop client to offer "Retrieve Metadata for PDF", which uses
+    Zotero's server-side recognition to build a proper bibliographic
+    parent item automatically.
+    """
+    _ = display_name  # Not needed for standalone attachments.
+    attachment = zot.attachment_simple([str(canonical_pdf_path)])
     attachment_key = _extract_attachment_key(attachment)
-    return item_key, attachment_key
+    return None, attachment_key
 
 
 def _is_rate_limited_error(error: Exception) -> bool:
@@ -165,7 +157,7 @@ def sync_batch_to_zotero(
                     content_sha256,
                     "zotero_imported",
                     source_path=str(canonical_pdf_path),
-                    detail=f"item={item_key}",
+                    detail=f"attachment={attachment_key}",
                 )
                 if progress_callback:
                     progress_callback({"hash": content_sha256, "status": "imported"})
