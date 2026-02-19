@@ -119,49 +119,8 @@ layers = [
     "rkb.cli",
     "rkb.services",
     "rkb.pipelines",
-    "rkb.extractors | rkb.embedders",  # Same layer - can import from each other
+    "rkb.extractors | rkb.embedders | rkb.collection",
     "rkb.core",
-]
-
-# Core layer cannot import from higher layers
-[[tool.importlinter.contracts]]
-name = "Core layer isolation"
-type = "forbidden"
-source_modules = ["rkb.core"]
-forbidden_modules = [
-    "rkb.services",
-    "rkb.pipelines",
-    "rkb.extractors",
-    "rkb.embedders",
-    "rkb.cli",
-    "rkb.collection",
-]
-
-# Processing layers cannot import from services or CLI
-[[tool.importlinter.contracts]]
-name = "Processing layer isolation"
-type = "forbidden"
-source_modules = ["rkb.extractors", "rkb.embedders", "rkb.pipelines"]
-forbidden_modules = ["rkb.services", "rkb.cli"]
-
-# Services cannot import from CLI
-[[tool.importlinter.contracts]]
-name = "Services isolation from CLI"
-type = "forbidden"
-source_modules = ["rkb.services"]
-forbidden_modules = ["rkb.cli"]
-
-# Collection layer: can import from core, not from higher layers.
-[[tool.importlinter.contracts]]
-name = "Collection layer isolation"
-type = "forbidden"
-source_modules = ["rkb.collection"]
-forbidden_modules = [
-    "rkb.services",
-    "rkb.pipelines",
-    "rkb.extractors",
-    "rkb.embedders",
-    "rkb.cli",
 ]
 
 # Triage layer should stay independent from extraction/indexing stack.

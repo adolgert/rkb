@@ -8,6 +8,7 @@ from pathlib import Path
 
 from rkb.cli.commands import (
     documents_cmd,
+    enrich_cmd,
     experiment_cmd,
     extract_cmd,
     find_cmd,
@@ -24,10 +25,24 @@ from rkb.cli.commands import (
 
 def create_parser() -> argparse.ArgumentParser:
     """Create the main argument parser with subcommands."""
+    # Shared options available on every subcommand (and on the top-level parser)
+    shared = argparse.ArgumentParser(add_help=False)
+    shared.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Enable verbose output"
+    )
+    shared.add_argument(
+        "--config",
+        type=Path,
+        help="Path to configuration file"
+    )
+
     parser = argparse.ArgumentParser(
         prog="rkb",
         description="Research Knowledge Base - PDF processing and semantic search system",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        parents=[shared],
         epilog="""
 Examples:
   rkb pipeline --data-dir data/papers --num-files 20
@@ -37,19 +52,6 @@ Examples:
   rkb project create "My Research Project"
   rkb experiment create "Test Setup" --embedder chroma
         """,
-    )
-
-    # Global options
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Enable verbose output"
-    )
-
-    parser.add_argument(
-        "--config",
-        type=Path,
-        help="Path to configuration file"
     )
 
     # Create subparsers for commands
@@ -62,6 +64,7 @@ Examples:
     # Pipeline command
     pipeline_parser = subparsers.add_parser(
         "pipeline",
+        parents=[shared],
         help="Run complete PDF processing pipeline",
         description="Process PDFs from finding recent files through indexing for search"
     )
@@ -70,6 +73,7 @@ Examples:
     # Search command (chunk-level)
     search_parser = subparsers.add_parser(
         "search",
+        parents=[shared],
         help="Search for chunks in the corpus",
         description="Perform semantic search over indexed chunks"
     )
@@ -78,6 +82,7 @@ Examples:
     # Documents command (document-level)
     documents_parser = subparsers.add_parser(
         "documents",
+        parents=[shared],
         help="Search for documents using ranking",
         description="Perform document-level semantic search with ranking metrics"
     )
@@ -86,6 +91,7 @@ Examples:
     # Index command
     index_parser = subparsers.add_parser(
         "index",
+        parents=[shared],
         help="Index documents for search",
         description="Create embeddings and index documents for semantic search"
     )
@@ -94,6 +100,7 @@ Examples:
     # Find command
     find_parser = subparsers.add_parser(
         "find",
+        parents=[shared],
         help="Find recent PDF files",
         description="Discover recent PDF files in a directory"
     )
@@ -102,14 +109,25 @@ Examples:
     # Ingest command
     ingest_parser = subparsers.add_parser(
         "ingest",
+        parents=[shared],
         help="Ingest PDFs into canonical content-addressed storage",
         description="Scan one or more directories and ingest discovered PDFs",
     )
     ingest_cmd.add_arguments(ingest_parser)
 
+    # Enrich command
+    enrich_parser = subparsers.add_parser(
+        "enrich",
+        parents=[shared],
+        help="Resolve metadata and rename PDFs in canonical collection",
+        description="Run metadata extractors on unresolved papers and rename files",
+    )
+    enrich_cmd.add_arguments(enrich_parser)
+
     # Rectify command
     rectify_parser = subparsers.add_parser(
         "rectify",
+        parents=[shared],
         help="Reconcile scattered PDFs into canonical store and Zotero",
         description="Run one-time bidirectional reconciliation of PDF collections",
     )
@@ -118,6 +136,7 @@ Examples:
     # Extract command
     extract_parser = subparsers.add_parser(
         "extract",
+        parents=[shared],
         help="Extract content from PDFs",
         description="Extract text and structure from PDF documents"
     )
@@ -126,6 +145,7 @@ Examples:
     # Project command
     project_parser = subparsers.add_parser(
         "project",
+        parents=[shared],
         help="Manage document projects",
         description="Create and manage document collections"
     )
@@ -134,6 +154,7 @@ Examples:
     # Experiment command
     experiment_parser = subparsers.add_parser(
         "experiment",
+        parents=[shared],
         help="Manage experiments",
         description="Create and compare different processing configurations"
     )
@@ -142,6 +163,7 @@ Examples:
     # Triage command
     triage_parser = subparsers.add_parser(
         "triage",
+        parents=[shared],
         help="Launch local work-side PDF triage app",
         description="Review PDFs from downloads and stage approved files",
     )
@@ -150,6 +172,7 @@ Examples:
     # Status command
     status_parser = subparsers.add_parser(
         "status",
+        parents=[shared],
         help="Show canonical collection and Zotero sync status",
         description="Report canonical counts, Zotero coverage, and recent ingest activity",
     )
@@ -190,6 +213,8 @@ def main(args: list[str] | None = None) -> int:  # noqa: PLR0912
             return find_cmd.execute(parsed_args)
         if parsed_args.command == "ingest":
             return ingest_cmd.execute(parsed_args)
+        if parsed_args.command == "enrich":
+            return enrich_cmd.execute(parsed_args)
         if parsed_args.command == "rectify":
             return rectify_cmd.execute(parsed_args)
         if parsed_args.command == "extract":

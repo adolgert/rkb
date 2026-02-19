@@ -42,6 +42,7 @@ class IngestSummary:
     zotero_imported: int = 0
     zotero_existing: int = 0
     failures: list[IngestFailure] = field(default_factory=list)
+    new_hashes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Convert ingest summary to JSON-serializable dictionary."""
@@ -290,4 +291,5 @@ def ingest_directories(
             lookup_catalog.close()
         write_catalog.close()
 
+    summary.new_hashes = newly_ingested_hashes
     return summary

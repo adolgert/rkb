@@ -31,16 +31,22 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--skip-zotero",
+        "--zotero",
         action="store_true",
         default=False,
-        help="Skip Zotero import step",
+        help="Enable Zotero import step (off by default)",
     )
 
     parser.add_argument(
         "--no-display-name",
         action="store_true",
         help="Use original filename instead of generated display name",
+    )
+
+    parser.add_argument(
+        "--resolve",
+        action="store_true",
+        help="Run metadata resolution and rename for newly ingested PDFs",
     )
 
     parser.add_argument(
@@ -67,6 +73,44 @@ def _print_human_summary(summary: dict) -> None:
             print(f"  {failure['path']} -- {failure['error']}")
 
 
+def _run_enrich_for_hashes(
+    config: CollectionConfig,
+    new_hashes: list[str],
+    *,
+    dry_run: bool,
+    use_json: bool,
+) -> int:
+    """Resolve metadata for newly ingested hashes."""
+    import os
+
+    from rkb.collection.catalog import Catalog
+    from rkb.services.enrich import enrich_collection
+    from rkb.services.metadata_resolver import MetadataResolver
+
+    catalog = Catalog(config.catalog_db)
+    catalog.initialize()
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    resolver = MetadataResolver(catalog, anthropic_api_key=api_key)
+
+    try:
+        enrich_summary = enrich_collection(
+            config, resolver, hashes=new_hashes, dry_run=dry_run,
+        )
+    finally:
+        catalog.close()
+
+    if use_json:
+        print(json.dumps(enrich_summary.to_dict(), indent=2))
+    else:
+        print()
+        print("Enrich:")
+        print(f"  Resolved:     {enrich_summary.resolved}")
+        print(f"  Renamed:      {enrich_summary.renamed}")
+        print(f"  Failed:       {enrich_summary.failed}")
+
+    return enrich_summary.exit_code()
+
+
 def execute(args: argparse.Namespace) -> int:
     """Execute the ingest command."""
     try:
@@ -76,7 +120,7 @@ def execute(args: argparse.Namespace) -> int:
             directories=args.directories,
             config=config,
             dry_run=args.dry_run,
-            skip_zotero=args.skip_zotero,
+            skip_zotero=not args.zotero,
             no_display_name=args.no_display_name,
         )
 
@@ -85,7 +129,18 @@ def execute(args: argparse.Namespace) -> int:
         else:
             _print_human_summary(summary.to_dict())
 
-        return summary.exit_code()
+        exit_code = summary.exit_code()
+
+        if args.resolve and summary.new_hashes:
+            enrich_exit = _run_enrich_for_hashes(
+                config,
+                summary.new_hashes,
+                dry_run=args.dry_run,
+                use_json=args.json,
+            )
+            exit_code = max(exit_code, enrich_exit)
+
+        return exit_code
     except (FileNotFoundError, NotADirectoryError, PermissionError, ValueError) as error:
         print(f"Ingest failed: {error}")
         return 1
