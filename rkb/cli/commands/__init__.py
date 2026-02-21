@@ -3,14 +3,11 @@
 # Import all command modules for easy access
 from . import (
     documents_cmd,
-    experiment_cmd,
-    extract_cmd,
-    find_cmd,
+    enrich_cmd,
     index_cmd,
     ingest_cmd,
-    pipeline_cmd,
-    project_cmd,
     rectify_cmd,
+    remove_cmd,
     search_cmd,
     status_cmd,
     translate_cmd,
@@ -19,14 +16,11 @@ from . import (
 
 __all__ = [
     "documents_cmd",
-    "experiment_cmd",
-    "extract_cmd",
-    "find_cmd",
+    "enrich_cmd",
     "index_cmd",
     "ingest_cmd",
-    "pipeline_cmd",
-    "project_cmd",
     "rectify_cmd",
+    "remove_cmd",
     "search_cmd",
     "status_cmd",
     "translate_cmd",

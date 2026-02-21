@@ -9,14 +9,10 @@ from pathlib import Path
 from rkb.cli.commands import (
     documents_cmd,
     enrich_cmd,
-    experiment_cmd,
-    extract_cmd,
-    find_cmd,
     index_cmd,
     ingest_cmd,
-    pipeline_cmd,
-    project_cmd,
     rectify_cmd,
+    remove_cmd,
     search_cmd,
     status_cmd,
     translate_cmd,
@@ -46,12 +42,10 @@ def create_parser() -> argparse.ArgumentParser:
         parents=[shared],
         epilog="""
 Examples:
-  rkb pipeline --data-dir data/papers --num-files 20
+  rkb ingest ~/papers
+  rkb translate
+  rkb index --embedder specter2
   rkb search "machine learning transformers"
-  rkb find --data-dir data/papers --num-files 50
-  rkb index --extractor nougat --embedder ollama
-  rkb project create "My Research Project"
-  rkb experiment create "Test Setup" --embedder chroma
         """,
     )
 
@@ -61,15 +55,6 @@ Examples:
         help="Available commands",
         metavar="COMMAND"
     )
-
-    # Pipeline command
-    pipeline_parser = subparsers.add_parser(
-        "pipeline",
-        parents=[shared],
-        help="Run complete PDF processing pipeline",
-        description="Process PDFs from finding recent files through indexing for search"
-    )
-    pipeline_cmd.add_arguments(pipeline_parser)
 
     # Search command (chunk-level)
     search_parser = subparsers.add_parser(
@@ -98,15 +83,6 @@ Examples:
     )
     index_cmd.add_arguments(index_parser)
 
-    # Find command
-    find_parser = subparsers.add_parser(
-        "find",
-        parents=[shared],
-        help="Find recent PDF files",
-        description="Discover recent PDF files in a directory"
-    )
-    find_cmd.add_arguments(find_parser)
-
     # Ingest command
     ingest_parser = subparsers.add_parser(
         "ingest",
@@ -133,33 +109,6 @@ Examples:
         description="Run one-time bidirectional reconciliation of PDF collections",
     )
     rectify_cmd.add_arguments(rectify_parser)
-
-    # Extract command
-    extract_parser = subparsers.add_parser(
-        "extract",
-        parents=[shared],
-        help="Extract content from PDFs",
-        description="Extract text and structure from PDF documents"
-    )
-    extract_cmd.add_arguments(extract_parser)
-
-    # Project command
-    project_parser = subparsers.add_parser(
-        "project",
-        parents=[shared],
-        help="Manage document projects",
-        description="Create and manage document collections"
-    )
-    project_cmd.add_arguments(project_parser)
-
-    # Experiment command
-    experiment_parser = subparsers.add_parser(
-        "experiment",
-        parents=[shared],
-        help="Manage experiments",
-        description="Create and compare different processing configurations"
-    )
-    experiment_cmd.add_arguments(experiment_parser)
 
     # Translate command
     translate_parser = subparsers.add_parser(
@@ -188,6 +137,15 @@ Examples:
     )
     status_cmd.add_arguments(status_parser)
 
+    # Remove command
+    remove_parser = subparsers.add_parser(
+        "remove",
+        parents=[shared],
+        help="Remove a PDF and all associated data from the collection",
+        description="Delete a PDF by title fragment or sha256 hash, cleaning up all records",
+    )
+    remove_cmd.add_arguments(remove_parser)
+
     return parser
 
 
@@ -211,34 +169,26 @@ def main(args: list[str] | None = None) -> int:  # noqa: PLR0912
 
     # Route to appropriate command handler
     try:
-        if parsed_args.command == "pipeline":
-            return pipeline_cmd.execute(parsed_args)
         if parsed_args.command == "search":
             return search_cmd.execute(parsed_args)
         if parsed_args.command == "documents":
             return documents_cmd.execute(parsed_args)
         if parsed_args.command == "index":
             return index_cmd.execute(parsed_args)
-        if parsed_args.command == "find":
-            return find_cmd.execute(parsed_args)
         if parsed_args.command == "ingest":
             return ingest_cmd.execute(parsed_args)
         if parsed_args.command == "enrich":
             return enrich_cmd.execute(parsed_args)
         if parsed_args.command == "rectify":
             return rectify_cmd.execute(parsed_args)
-        if parsed_args.command == "extract":
-            return extract_cmd.execute(parsed_args)
-        if parsed_args.command == "project":
-            return project_cmd.execute(parsed_args)
-        if parsed_args.command == "experiment":
-            return experiment_cmd.execute(parsed_args)
         if parsed_args.command == "translate":
             return translate_cmd.execute(parsed_args)
         if parsed_args.command == "triage":
             return triage_cmd.execute(parsed_args)
         if parsed_args.command == "status":
             return status_cmd.execute(parsed_args)
+        if parsed_args.command == "remove":
+            return remove_cmd.execute(parsed_args)
         print(f"Unknown command: {parsed_args.command}")
         return 1
 
