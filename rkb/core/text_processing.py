@@ -118,6 +118,96 @@ def chunk_text_by_pages(content: str, max_chunk_size: int = 2000) -> list[tuple[
     return chunks
 
 
+def chunk_text_by_sections(
+    content: str, max_chunk_size: int = 3000
+) -> list[tuple[str, list[str]]]:
+    """Split markdown content into section-based chunks with section hierarchy.
+
+    Finds the minimum heading level present in the document and splits at that
+    level. Falls back to chunk_text_by_pages if no headings are found.
+
+    Strips bold wrappers from heading text (e.g. ``## **Introduction**``
+    becomes ``Introduction``).
+
+    Args:
+        content: Text content to chunk (markdown format)
+        max_chunk_size: Maximum size per chunk in characters
+
+    Returns:
+        List of (chunk_text, section_hierarchy) tuples where section_hierarchy
+        is a list of heading strings for the section (currently always one
+        element — the immediate heading).  Falls back to
+        chunk_text_by_pages with empty section_hierarchy if no headings found.
+    """
+    heading_re = re.compile(r"^(#{1,6}) +(.+)$", re.MULTILINE)
+    all_headings = heading_re.findall(content)
+
+    if not all_headings:
+        # Fall back to page-based chunking with empty section hierarchy
+        page_chunks = chunk_text_by_pages(content, max_chunk_size)
+        return [(text, []) for text, _ in page_chunks]
+
+    # Find minimum heading level present
+    min_level = min(len(hashes) for hashes, _ in all_headings)
+    top_re = re.compile(r"^#{" + str(min_level) + r"}(?!#) +(.+)$", re.MULTILINE)
+
+    def _strip_bold(text: str) -> str:
+        text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+        text = re.sub(r"__(.+?)__", r"\1", text)
+        return text.strip()
+
+    # Locate all top-level heading positions
+    splits = list(top_re.finditer(content))
+
+    chunks: list[tuple[str, list[str]]] = []
+
+    def _add_section(body: str, heading: str) -> None:
+        """Add a section body; sub-chunk if it exceeds max_chunk_size."""
+        heading_line = "#" * min_level + " " + heading
+        if len(body) <= max_chunk_size:
+            chunks.append((body, [heading]))
+            return
+        # Sub-chunk by paragraphs; prepend heading to every sub-chunk
+        paragraphs = re.split(r"\n\n+", body)
+        current = ""
+        for para in paragraphs:
+            candidate = current + ("\n\n" if current else "") + para
+            if current and len(heading_line + "\n\n" + candidate) > max_chunk_size:
+                chunks.append((heading_line + "\n\n" + current.strip(), [heading]))
+                current = para
+            else:
+                current = candidate
+        if current.strip():
+            chunks.append((heading_line + "\n\n" + current.strip(), [heading]))
+
+    # Content before the first top-level heading
+    if splits:
+        preamble = content[: splits[0].start()].strip()
+        if preamble:
+            if len(preamble) <= max_chunk_size:
+                chunks.append((preamble, []))
+            else:
+                page_chunks = chunk_text_by_pages(preamble, max_chunk_size)
+                chunks.extend((text, []) for text, _ in page_chunks)
+
+    # Process each top-level section
+    for i, match in enumerate(splits):
+        raw_heading = match.group(1)
+        heading_text = _strip_bold(raw_heading)
+
+        # Section body spans from the matched heading line to the next split
+        sec_start = match.start()
+        sec_end = splits[i + 1].start() if i + 1 < len(splits) else len(content)
+        section_body = content[sec_start:sec_end].strip()
+
+        _add_section(section_body, heading_text)
+
+    if not chunks:
+        return [(content, [])]
+
+    return chunks
+
+
 def create_chunk_metadata(
     chunks: list[tuple[str, list[int]]],
     chunk_index_offset: int = 0

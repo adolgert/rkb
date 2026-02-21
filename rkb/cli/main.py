@@ -19,6 +19,7 @@ from rkb.cli.commands import (
     rectify_cmd,
     search_cmd,
     status_cmd,
+    translate_cmd,
     triage_cmd,
 )
 
@@ -160,6 +161,15 @@ Examples:
     )
     experiment_cmd.add_arguments(experiment_parser)
 
+    # Translate command
+    translate_parser = subparsers.add_parser(
+        "translate",
+        parents=[shared],
+        help="Translate PDFs to Markdown using marker-pdf",
+        description="Convert PDFs in the canonical store to Markdown using marker-pdf with Gemini",
+    )
+    translate_cmd.add_arguments(translate_parser)
+
     # Triage command
     triage_parser = subparsers.add_parser(
         "triage",
@@ -223,6 +233,8 @@ def main(args: list[str] | None = None) -> int:  # noqa: PLR0912
             return project_cmd.execute(parsed_args)
         if parsed_args.command == "experiment":
             return experiment_cmd.execute(parsed_args)
+        if parsed_args.command == "translate":
+            return translate_cmd.execute(parsed_args)
         if parsed_args.command == "triage":
             return triage_cmd.execute(parsed_args)
         if parsed_args.command == "status":

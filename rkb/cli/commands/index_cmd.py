@@ -13,9 +13,18 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     """Add command-specific arguments."""
     parser.add_argument(
         "--embedder",
-        choices=["chroma", "ollama"],
-        default="chroma",
-        help="Embedder to use (default: chroma)"
+        choices=["chroma", "ollama", "specter2"],
+        default="specter2",
+        help="Embedder to use (default: specter2)"
+    )
+
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help=(
+            "Wipe and re-index everything (Chroma collection + BM25). "
+            "Required to rebuild from scratch — guards against accidental data loss."
+        ),
     )
 
     parser.add_argument(
@@ -72,13 +81,22 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 def execute(args: argparse.Namespace) -> int:
     """Execute the index command."""
     try:
+        rebuild = getattr(args, "rebuild", False)
+
         print("🔗 RKB Document Indexing")
         print("=" * 30)
         print(f"⚙️  Embedder: {args.embedder}")
         print(f"📁 Vector DB: {args.vector_db_path}")
         print(f"🔄 Force reindex: {args.force_reindex}")
+        print(f"🔁 Rebuild (wipe): {rebuild}")
         print(f"🧪 Dry run: {args.dry_run}")
         print()
+
+        # Handle rebuild: wipe existing Chroma collection and BM25 files
+        if rebuild and not args.dry_run:
+            _wipe_index(args.vector_db_path, args.collection_name)
+            print("🗑️  Existing index wiped.")
+            print()
 
         # Initialize services
         registry = DocumentRegistry(args.db_path)
@@ -152,7 +170,9 @@ def execute(args: argparse.Namespace) -> int:
         print(f"❌ Failed indexing: {results['failed_embeddings']}")
 
         if results["successful_embeddings"] > 0:
-            print("\n🔍 Ready for semantic search!")
+            # Build BM25 index from the indexed chunks
+            _build_bm25(args.vector_db_path, args.collection_name)
+            print("\n🔍 Ready for hybrid search!")
             print('   Run: rkb search "your query here"')
 
         return 0
@@ -163,3 +183,60 @@ def execute(args: argparse.Namespace) -> int:
             import traceback
             traceback.print_exc()
         return 1
+
+
+def _wipe_index(vector_db_path: Path, collection_name: str) -> None:
+    """Delete the Chroma collection and BM25 index files."""
+    import contextlib
+
+    import chromadb
+
+    from rkb.services.bm25_index import BM25Index
+
+    # Remove Chroma collection
+    if vector_db_path.exists():
+        with contextlib.suppress(Exception):
+            client = chromadb.PersistentClient(path=str(vector_db_path))
+            with contextlib.suppress(Exception):
+                client.delete_collection(collection_name)
+
+    # Remove BM25 files
+    BM25Index(vector_db_path).wipe()
+
+
+def _build_bm25(vector_db_path: Path, collection_name: str) -> None:
+    """Build BM25 index from the current contents of the Chroma collection."""
+    import chromadb
+
+    from rkb.services.bm25_index import BM25Index
+
+    print("\n📝 Building BM25 keyword index...")
+    try:
+        client = chromadb.PersistentClient(path=str(vector_db_path))
+        collection = client.get_collection(collection_name)
+        total = collection.count()
+        if total == 0:
+            print("   No chunks found — BM25 index skipped.")
+            return
+
+        # Fetch all chunks (id + document text)
+        batch_size = 5000
+        chunk_pairs: list[tuple[str, str]] = []
+        offset = 0
+        while offset < total:
+            batch = collection.get(
+                limit=batch_size,
+                offset=offset,
+                include=["documents"],
+            )
+            if not batch["documents"]:
+                break
+            for cid, doc in zip(batch["ids"], batch["documents"], strict=True):
+                chunk_pairs.append((cid, doc))
+            offset += len(batch["ids"])
+
+        bm25 = BM25Index(vector_db_path)
+        bm25.build(chunk_pairs)
+        print(f"   BM25 index built with {len(chunk_pairs):,} chunks.")
+    except Exception as exc:
+        print(f"   Warning: BM25 index build failed: {exc}")

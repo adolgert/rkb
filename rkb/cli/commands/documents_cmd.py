@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from rkb.core.document_registry import DocumentRegistry
+from rkb.services.bm25_index import BM25Index
 from rkb.services.search_service import SearchService
 
 
@@ -39,9 +40,16 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument(
         "--embedder",
-        choices=["chroma", "ollama"],
+        choices=["chroma", "ollama", "specter2"],
         default="chroma",
         help="Embedder to use (default: chroma)"
+    )
+
+    parser.add_argument(
+        "--mode",
+        choices=["hybrid", "semantic", "bm25"],
+        default="hybrid",
+        help="Search mode: hybrid (BM25 + semantic), semantic, or bm25 (default: hybrid)"
     )
 
     parser.add_argument(
@@ -104,11 +112,14 @@ def execute(args: argparse.Namespace) -> int:
     try:
         # Initialize services
         registry = DocumentRegistry(args.db_path)
+        bm25 = BM25Index(args.vector_db_path)
+        bm25.load()
         search_service = SearchService(
             db_path=args.vector_db_path,
             collection_name=args.collection_name,
             embedder_name=args.embedder,
-            registry=registry
+            registry=registry,
+            bm25_index=bm25,
         )
 
         # Handle stats request
@@ -163,6 +174,7 @@ def _perform_search(search_service: SearchService, query: str, args: argparse.Na
         min_threshold=args.threshold,
         filter_equations=filter_equations,
         project_id=args.project_id,
+        mode=getattr(args, "mode", "hybrid"),
     )
 
     # Display results
@@ -243,7 +255,7 @@ def _display_results(
                 pages = display_data.get("page_numbers", [])
                 page_str = f"#page={pages[0]}" if pages else ""
                 # URL-encode the path, preserving forward slashes
-                encoded_path = quote(doc_path, safe='/')
+                encoded_path = quote(doc_path, safe="/")
                 file_link = f"file://{encoded_path}{page_str}"
                 print(f"🔗 Link: {file_link}")
 

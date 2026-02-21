@@ -64,6 +64,7 @@ class MetadataResolver:
         catalog: Catalog,
         *,
         anthropic_api_key: str | None = None,
+        s2_api_key: str | None = None,
         grobid_url: str = "http://172.17.0.1:8070",
         use_claude_merge: bool = True,
     ) -> None:
@@ -76,7 +77,7 @@ class MetadataResolver:
         self._grobid = GrobidExtractor(grobid_url=grobid_url)
         self._crossref = DOICrossRefExtractor()
         self._arxiv = ArxivExtractor()
-        self._s2 = SemanticScholarExtractor()
+        self._s2 = SemanticScholarExtractor(api_key=s2_api_key)
 
     def resolve(
         self, pdf_path: Path, content_sha256: str, *, force: bool = False

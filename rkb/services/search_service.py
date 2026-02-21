@@ -1,15 +1,20 @@
 """Search service for semantic search over document corpus."""
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import chromadb
 
 from rkb.core.document_registry import DocumentRegistry
 from rkb.core.models import ChunkResult, DocumentScore, SearchResult
 from rkb.embedders.base import get_embedder
+
+if TYPE_CHECKING:
+    from rkb.services.bm25_index import BM25Index
 
 LOGGER = logging.getLogger("rkb.services.search_service")
 
@@ -23,6 +28,7 @@ class SearchService:
         collection_name: str = "documents",
         embedder_name: str = "chroma",
         registry: DocumentRegistry | None = None,
+        bm25_index: BM25Index | None = None,
     ):
         """Initialize search service.
 
@@ -31,6 +37,7 @@ class SearchService:
             collection_name: Name of Chroma collection
             embedder_name: Name of embedder to use for query embedding
             registry: Document registry for metadata lookup
+            bm25_index: Optional pre-built BM25 index for hybrid search.
         """
         self.db_path = Path(db_path)
         self.collection_name = collection_name
@@ -43,6 +50,9 @@ class SearchService:
         # Initialize Chroma client
         self._chroma_client = None
         self._collection = None
+
+        # Optional BM25 index for hybrid / keyword search
+        self.bm25_index = bm25_index
 
     def close(self) -> None:
         """Close any open connections and clear cached objects."""
@@ -376,6 +386,175 @@ class SearchService:
             "chunk_id": best_chunk.chunk_id,
         }
 
+    def _fetch_top_chunks(
+        self,
+        query: str,
+        n: int = 200,
+        filter_equations: bool | None = None,
+        project_id: str | None = None,
+    ) -> list[ChunkResult]:
+        """Fetch the top *n* semantically similar chunks from Chroma.
+
+        Uses ``query_embeddings`` when the embedder supports ``embed_query``,
+        otherwise falls back to ``query_texts`` (Chroma's built-in embedding).
+
+        Args:
+            query: Query string.
+            n: Maximum number of chunks to fetch.
+            filter_equations: Optional equation filter.
+            project_id: Optional project filter.
+
+        Returns:
+            List of ChunkResult objects (may be shorter than *n* if the
+            collection is small).
+        """
+        try:
+            collection = self._get_collection()
+
+            where_filter: dict[str, Any] = {}
+            if filter_equations is not None:
+                where_filter["has_equations"] = filter_equations
+            if project_id is not None:
+                where_filter["project_id"] = project_id
+
+            # Use explicit query embeddings if the embedder supports it
+            query_vector = self.embedder.embed_query(query)
+            if query_vector is not None:
+                search_kwargs: dict[str, Any] = {
+                    "query_embeddings": [query_vector],
+                    "n_results": min(n, 10000),
+                }
+            else:
+                search_kwargs = {
+                    "query_texts": [query],
+                    "n_results": min(n, 10000),
+                }
+
+            if where_filter:
+                search_kwargs["where"] = where_filter
+
+            results = collection.query(**search_kwargs)
+
+            chunk_results: list[ChunkResult] = []
+            if results and results["documents"] and results["documents"][0]:
+                docs = results["documents"][0]
+                metas = results["metadatas"][0]
+                dists = results["distances"][0]
+                ids = results["ids"][0] if results["ids"] else [None] * len(docs)
+
+                for doc, meta, distance, chunk_id in zip(
+                    docs, metas, dists, ids, strict=True
+                ):
+                    similarity = 1 / (1 + distance) if distance is not None else 0.0
+                    chunk_results.append(
+                        ChunkResult(
+                            chunk_id=chunk_id or f"chunk_{len(chunk_results)}",
+                            content=doc,
+                            similarity=similarity,
+                            distance=distance,
+                            metadata=meta or {},
+                        )
+                    )
+
+            return chunk_results
+
+        except Exception:
+            LOGGER.exception("Error in _fetch_top_chunks")
+            return []
+
+    def search_hybrid(
+        self,
+        query: str,
+        n_docs: int = 10,
+        n_candidates: int = 200,
+    ) -> tuple[list[DocumentScore], list[ChunkResult]]:
+        """Hybrid BM25 + semantic search using Reciprocal Rank Fusion (RRF).
+
+        Combines Chroma semantic candidates with BM25 keyword candidates via
+        RRF (k = 60).  Document-level scores are aggregated with max pooling
+        over chunk RRF scores.
+
+        Args:
+            query: Search query.
+            n_docs: Number of documents to return.
+            n_candidates: Number of candidates from each retrieval method.
+
+        Returns:
+            Tuple of (ranked_docs, all_semantic_chunks) where
+            *all_semantic_chunks* can be used for display data retrieval.
+        """
+        rrf_k = 60
+
+        # 1. Semantic candidates from Chroma
+        semantic_chunks = self._fetch_top_chunks(query, n=n_candidates)
+
+        # Build rank map: chunk_id -> rank (0-indexed)
+        semantic_rank: dict[str, int] = {
+            chunk.chunk_id: i for i, chunk in enumerate(semantic_chunks)
+        }
+
+        # 2. BM25 candidates
+        bm25_results: list[tuple[str, float]] = []
+        if self.bm25_index is not None and self.bm25_index.is_built():
+            bm25_results = self.bm25_index.search(query, n=n_candidates)
+
+        bm25_rank: dict[str, int] = {cid: i for i, (cid, _) in enumerate(bm25_results)}
+
+        # 3. Collect all unique chunk IDs from both rankings
+        all_chunk_ids = set(semantic_rank) | set(bm25_rank)
+
+        default_rank = n_candidates + 1  # rank assigned when absent from a list
+
+        # 4. Compute per-chunk RRF score
+        chunk_rrf: dict[str, float] = {}
+        for cid in all_chunk_ids:
+            sem_rank = semantic_rank.get(cid, default_rank)
+            bm_rank = bm25_rank.get(cid, default_rank)
+            chunk_rrf[cid] = 1.0 / (rrf_k + sem_rank) + 1.0 / (rrf_k + bm_rank)
+
+        # 5. Build a lookup from chunk_id to ChunkResult for metadata access
+        chunk_lookup: dict[str, ChunkResult] = {c.chunk_id: c for c in semantic_chunks}
+
+        # Add BM25-only chunks (not in Chroma results) — we need doc_id from BM25
+        # chunk IDs are formatted as "{doc_id}_{chunk_index}" if built that way.
+        # If not available in chunk_lookup, we'll skip metadata later.
+
+        # 6. Aggregate chunk RRF scores to document level via max pooling
+        doc_max_rrf: dict[str, float] = {}
+        doc_best_chunk: dict[str, str] = {}
+        doc_chunk_count: dict[str, int] = {}
+
+        for cid, rrf_score in chunk_rrf.items():
+            chunk = chunk_lookup.get(cid)
+            doc_id: str | None = None
+            if chunk is not None:
+                doc_id = chunk.metadata.get("doc_id")
+            if doc_id is None:
+                # Try to parse doc_id from BM25 chunk ID convention
+                # (chunk IDs built during indexing may embed doc_id)
+                continue
+
+            if doc_id not in doc_max_rrf or rrf_score > doc_max_rrf[doc_id]:
+                doc_max_rrf[doc_id] = rrf_score
+                doc_best_chunk[doc_id] = cid
+
+            doc_chunk_count[doc_id] = doc_chunk_count.get(doc_id, 0) + 1
+
+        # 7. Build DocumentScore objects and sort
+        doc_scores = [
+            DocumentScore(
+                doc_id=doc_id,
+                score=score,
+                metric_name="hybrid",
+                best_chunk_score=score,
+                matching_chunk_count=doc_chunk_count.get(doc_id),
+            )
+            for doc_id, score in doc_max_rrf.items()
+        ]
+        doc_scores.sort(key=lambda d: d.score, reverse=True)
+
+        return doc_scores[:n_docs], semantic_chunks
+
     def search_documents_ranked(
         self,
         query: str,
@@ -384,33 +563,91 @@ class SearchService:
         min_threshold: float | None = None,
         filter_equations: bool | None = None,
         project_id: str | None = None,
+        mode: str = "hybrid",
     ) -> tuple[list[DocumentScore], list[ChunkResult], dict[str, Any]]:
         """Search and rank documents using document-level metrics.
 
-        This is the main entry point for document-level search. It:
-        1. Fetches chunks iteratively until N documents found
-        2. Ranks documents using the specified metric
-        3. Returns top N documents with all chunks for display data
+        This is the main entry point for document-level search.
 
         Args:
-            query: Search query text
-            n_docs: Number of documents to return (default: 10)
-            metric: Ranking metric - "similarity" (max pooling) or "relevance" (hit counting)
-            min_threshold: Minimum similarity threshold (if None, uses embedder default)
-            filter_equations: Filter by presence of equations
-            project_id: Filter by project ID
+            query: Search query text.
+            n_docs: Number of documents to return (default: 10).
+            metric: Ranking metric for semantic/BM25-only paths —
+                ``"similarity"`` (max pooling) or ``"relevance"`` (hit
+                counting).  Ignored when *mode* is ``"hybrid"``.
+            min_threshold: Minimum similarity threshold; uses embedder default
+                when None.
+            filter_equations: Filter by presence of equations.
+            project_id: Filter by project ID.
+            mode: Search mode — ``"hybrid"`` (BM25 + semantic, default),
+                ``"semantic"`` (Chroma only), or ``"bm25"`` (BM25 only).
 
         Returns:
-            Tuple of (ranked_docs, all_chunks, stats):
-            - ranked_docs: List of DocumentScore objects (top N, sorted by score)
-            - all_chunks: All chunks fetched (needed for display data)
-            - stats: Search statistics (chunks_fetched, iterations, etc.)
+            Tuple of ``(ranked_docs, all_chunks, stats)``:
+
+            - *ranked_docs*: top-N ``DocumentScore`` objects sorted by score.
+            - *all_chunks*: chunks fetched from Chroma (used for display data).
+            - *stats*: search statistics dict.
         """
-        # Get threshold from embedder if not provided
+        if mode == "hybrid":
+            ranked_docs, all_chunks = self.search_hybrid(query, n_docs=n_docs)
+            stats: dict[str, Any] = {
+                "chunks_fetched": len(all_chunks),
+                "chunks_above_threshold": len(all_chunks),
+                "iterations": 1,
+                "documents_found": len(ranked_docs),
+                "mode": "hybrid",
+            }
+            return ranked_docs, all_chunks, stats
+
+        if mode == "bm25":
+            if self.bm25_index is None or not self.bm25_index.is_built():
+                LOGGER.warning("BM25 index not available; returning empty results")
+                return [], [], {"mode": "bm25", "error": "BM25 index not built"}
+
+            bm25_results = self.bm25_index.search(query, n=n_docs * 20)
+            # Group by doc_id from chunk ID metadata — we need Chroma for that,
+            # so fall back to a small semantic fetch to retrieve chunk metadata.
+            semantic_chunks = self._fetch_top_chunks(
+                query, n=200, filter_equations=filter_equations, project_id=project_id
+            )
+            # Use semantic chunks only to get doc metadata; rank by BM25
+            chunk_meta_lookup: dict[str, dict] = {
+                c.chunk_id: c.metadata for c in semantic_chunks
+            }
+            # Aggregate to document level
+            doc_best: dict[str, float] = {}
+            doc_count: dict[str, int] = {}
+            for cid, score in bm25_results:
+                meta = chunk_meta_lookup.get(cid, {})
+                doc_id = meta.get("doc_id")
+                if doc_id:
+                    if doc_id not in doc_best or score > doc_best[doc_id]:
+                        doc_best[doc_id] = score
+                    doc_count[doc_id] = doc_count.get(doc_id, 0) + 1
+
+            ranked: list[DocumentScore] = [
+                DocumentScore(
+                    doc_id=did,
+                    score=score,
+                    metric_name="bm25",
+                    matching_chunk_count=doc_count.get(did),
+                )
+                for did, score in sorted(doc_best.items(), key=lambda x: x[1], reverse=True)
+            ]
+            stats = {
+                "chunks_fetched": len(semantic_chunks),
+                "chunks_above_threshold": len(bm25_results),
+                "iterations": 1,
+                "documents_found": len(ranked),
+                "mode": "bm25",
+            }
+            return ranked[:n_docs], semantic_chunks, stats
+
+        # mode == "semantic" (original behaviour)
         if min_threshold is None:
             min_threshold = self.embedder.minimum_threshold
 
-        # Step 1: Fetch chunks iteratively
         all_chunks, stats = self.fetch_chunks_iteratively(
             query=query,
             n_docs=n_docs,
@@ -419,7 +656,6 @@ class SearchService:
             project_id=project_id,
         )
 
-        # Step 2: Rank documents by chosen metric
         if metric == "similarity":
             ranked_docs = self.rank_by_similarity(all_chunks)
         elif metric == "relevance":
@@ -429,14 +665,18 @@ class SearchService:
                 f"Unknown metric '{metric}'. Expected 'similarity' or 'relevance'"
             )
 
-        # Step 3: Return top N documents
         top_n_docs = ranked_docs[:n_docs]
+        stats["mode"] = "semantic"
 
-        # Log search completion
         LOGGER.info(
-            f"Document search complete: query='{query}', metric={metric}, "
-            f"found {len(top_n_docs)} documents (fetched {stats['chunks_fetched']} "
-            f"chunks in {stats['iterations']} iterations)"
+            "Document search complete: query='%s', metric=%s, mode=%s, "
+            "found %d documents (fetched %d chunks in %d iterations)",
+            query,
+            metric,
+            mode,
+            len(top_n_docs),
+            stats["chunks_fetched"],
+            stats["iterations"],
         )
 
         return top_n_docs, all_chunks, stats

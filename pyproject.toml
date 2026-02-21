@@ -29,6 +29,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pyyaml>=6.0",
     "ollama>=0.1.0",
+    "rank-bm25>=0.2.2",
+    "sentence-transformers>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -116,7 +118,7 @@ root_package = "rkb"
 name = "Layer architecture"
 type = "layers"
 layers = [
-    "rkb.cli",
+    "rkb.cli | rkb.api",
     "rkb.services",
     "rkb.pipelines",
     "rkb.extractors | rkb.embedders | rkb.collection",
@@ -143,6 +145,7 @@ modules = [
     "rkb.extractors.nougat_extractor",
     "rkb.embedders.ollama_embedder",
     "rkb.embedders.chroma_embedder",
+    "rkb.embedders.specter2_embedder",
 ]
 
 [tool.pytest.ini_options]

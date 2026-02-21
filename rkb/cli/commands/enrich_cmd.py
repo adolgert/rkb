@@ -44,8 +44,11 @@ def _build_resolver(config: CollectionConfig):
 
     catalog = Catalog(config.catalog_db)
     catalog.initialize()
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    return MetadataResolver(catalog, anthropic_api_key=api_key), catalog
+    return MetadataResolver(
+        catalog,
+        anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY"),
+        s2_api_key=os.environ.get("S2_API_KEY"),
+    ), catalog
 
 
 def _print_human_summary(summary_dict: dict) -> None:

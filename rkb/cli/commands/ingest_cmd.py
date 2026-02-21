@@ -89,8 +89,11 @@ def _run_enrich_for_hashes(
 
     catalog = Catalog(config.catalog_db)
     catalog.initialize()
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    resolver = MetadataResolver(catalog, anthropic_api_key=api_key)
+    resolver = MetadataResolver(
+        catalog,
+        anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY"),
+        s2_api_key=os.environ.get("S2_API_KEY"),
+    )
 
     try:
         enrich_summary = enrich_collection(

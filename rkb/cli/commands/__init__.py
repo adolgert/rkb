@@ -13,6 +13,7 @@ from . import (
     rectify_cmd,
     search_cmd,
     status_cmd,
+    translate_cmd,
     triage_cmd,
 )
 
@@ -28,5 +29,6 @@ __all__ = [
     "rectify_cmd",
     "search_cmd",
     "status_cmd",
+    "translate_cmd",
     "triage_cmd",
 ]

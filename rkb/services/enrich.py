@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from rkb.collection.canonical_store import rename_pdf
+from rkb.collection.bibtex import write_bib_file
+from rkb.collection.canonical_store import canonical_dir, rename_pdf
 from rkb.collection.catalog import Catalog
 from rkb.collection.display_name import generate_display_name
 
@@ -153,6 +154,10 @@ def _enrich_one(
         return
 
     summary.resolved += 1
+
+    if result.title:
+        hash_dir = canonical_dir(config.library_root, content_sha256)
+        write_bib_file(hash_dir, result, content_sha256)
 
     if rename and result.title:
         first_author = result.authors[0] if result.authors else None

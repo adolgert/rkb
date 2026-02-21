@@ -6,7 +6,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from rkb.core.models import Document, DocumentStatus, EmbeddingResult, ExtractionResult, ExtractionStatus
+from rkb.core.models import (
+    Document,
+    DocumentStatus,
+    EmbeddingResult,
+    ExtractionResult,
+    ExtractionStatus,
+)
 
 LOGGER = logging.getLogger("rkb.core.document_registry")
 

@@ -17,6 +17,11 @@ _INITIAL_BACKOFF = 2.0
 class SemanticScholarExtractor(MetadataExtractor):
     """Extract metadata from Semantic Scholar API by title or DOI."""
 
+    def __init__(self, *, api_key: str | None = None) -> None:
+        self._headers: dict[str, str] = {}
+        if api_key:
+            self._headers["x-api-key"] = api_key
+
     @property
     def name(self) -> str:
         return "semantic_scholar"
@@ -75,14 +80,13 @@ class SemanticScholarExtractor(MetadataExtractor):
             extractor=self.name,
         )
 
-    @staticmethod
     def _request_with_retry(
-        url: str, *, params: dict | None = None
+        self, url: str, *, params: dict | None = None
     ) -> requests.Response | None:
         """GET with exponential backoff on 429 responses."""
         backoff = _INITIAL_BACKOFF
         for attempt in range(_MAX_RETRIES):
-            response = requests.get(url, params=params, timeout=15)
+            response = requests.get(url, params=params, headers=self._headers, timeout=15)
             if response.status_code == 429:
                 if attempt < _MAX_RETRIES - 1:
                     time.sleep(backoff)

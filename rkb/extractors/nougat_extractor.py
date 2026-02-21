@@ -25,12 +25,13 @@ from rkb.extractors.base import register_extractor
 def _patch_nougat_for_new_transformers() -> None:
     """Patch nougat's BARTDecoder to work with transformers >=4.35."""
     try:
-        from nougat.model import BARTDecoder
         import inspect
+
+        from nougat.model import BARTDecoder
 
         # Check if patch is needed by inspecting the method signature
         sig = inspect.signature(BARTDecoder.prepare_inputs_for_generation)
-        if 'cache_position' in sig.parameters:
+        if "cache_position" in sig.parameters:
             # Already patched or compatible
             return
 
@@ -40,7 +41,7 @@ def _patch_nougat_for_new_transformers() -> None:
         # Create wrapper that accepts and ignores cache_position
         def prepare_inputs_wrapper(self, input_ids, **kwargs):
             # Remove cache_position if present (added in transformers 4.35+)
-            kwargs.pop('cache_position', None)
+            kwargs.pop("cache_position", None)
             return original_prepare(self, input_ids, **kwargs)
 
         # Apply patch
@@ -235,7 +236,7 @@ class NougatExtractor(ExtractorInterface):
                             f"    Chunk {start_page}-{end_page}: Empty or insufficient content (length: {content_len})"
                         )
                         if chunk_content:
-                            logger.debug(f"    Content: {repr(chunk_content)}")
+                            logger.debug(f"    Content: {chunk_content!r}")
                         failed_chunks.append(
                             (start_page, end_page, "Empty or insufficient content")
                         )
@@ -246,7 +247,7 @@ class NougatExtractor(ExtractorInterface):
                     failed_chunks.append((start_page, end_page, "Timeout"))
                 except Exception as e:
                     import logging
-                    logging.getLogger(__name__).warning(f"    Chunk {start_page}-{end_page}: {str(e)}")
+                    logging.getLogger(__name__).warning(f"    Chunk {start_page}-{end_page}: {e!s}")
                     failed_chunks.append((start_page, end_page, str(e)))
 
         # Combine content with metadata header

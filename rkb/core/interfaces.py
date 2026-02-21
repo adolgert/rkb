@@ -114,6 +114,22 @@ class EmbedderInterface(ABC):
             Minimum similarity threshold (typically between 0.0 and 1.0)
         """
 
+    def embed_query(self, query: str) -> list[float] | None:  # noqa: ARG002
+        """Embed a single query string into a vector.
+
+        Embedders that provide explicit query-embedding support (e.g.
+        SPECTER2) override this method. The default implementation returns
+        None, which signals to callers that the embedder relies on the vector
+        database's built-in embedding function instead.
+
+        Args:
+            query: Query text to embed
+
+        Returns:
+            Embedding vector, or None if not supported by this embedder.
+        """
+        return None
+
 
 class ChunkerInterface(ABC):
     """Abstract interface for text chunkers."""

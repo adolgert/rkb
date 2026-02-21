@@ -125,6 +125,7 @@ class TestDocumentSearchIntegration:
                 query="machine learning",
                 n_docs=3,
                 metric="similarity",
+                mode="semantic",
             )
 
             # Verify we got 3 documents
@@ -174,6 +175,7 @@ class TestDocumentSearchIntegration:
                 query="machine learning",
                 n_docs=3,
                 metric="relevance",
+                mode="semantic",
             )
 
             # With threshold 0.3:
@@ -213,6 +215,7 @@ class TestDocumentSearchIntegration:
                 query="machine learning",
                 n_docs=3,
                 metric="similarity",
+                mode="semantic",
             )
 
             # Get display data for top document
@@ -251,6 +254,7 @@ class TestDocumentSearchIntegration:
                 n_docs=3,
                 metric="relevance",
                 min_threshold=0.7,
+                mode="semantic",
             )
 
             # With threshold 0.7:
@@ -292,6 +296,7 @@ class TestDocumentSearchIntegration:
                 metric="similarity",
                 filter_equations=True,
                 project_id="test_project",
+                mode="semantic",
             )
 
             # Verify filters were passed through to ChromaDB
@@ -323,6 +328,7 @@ class TestDocumentSearchIntegration:
                 service.search_documents_ranked(
                     query="test",
                     metric="invalid",
+                    mode="semantic",
                 )
 
             service.close()
@@ -350,6 +356,7 @@ class TestDocumentSearchIntegration:
                 query="machine learning",
                 n_docs=2,
                 metric="similarity",
+                mode="semantic",
             )
 
             # Should return exactly 2 documents (top ranked)
@@ -379,6 +386,7 @@ class TestDocumentSearchIntegration:
                 query="nonexistent query",
                 n_docs=10,
                 metric="similarity",
+                mode="semantic",
             )
 
             # Should handle empty results gracefully
