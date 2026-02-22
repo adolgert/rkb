@@ -167,6 +167,7 @@ class DocumentScore:
     # Metric-specific data (optional, for debugging/analysis)
     matching_chunk_count: int | None = None  # For relevance metric
     best_chunk_score: float | None = None  # For similarity metric
+    total_chunk_count: int | None = None  # Total chunks indexed for this document
 
     def __post_init__(self) -> None:
         """Validate score."""

@@ -18,7 +18,7 @@ This is the methods section.
 
 This is the results section.
 """
-    chunks = chunk_text_by_sections(content)
+    chunks = chunk_text_by_sections(content, min_chunk_size=0)
     assert len(chunks) == 3
     texts = [t for t, _ in chunks]
     hierarchies = [h for _, h in chunks]
@@ -42,7 +42,7 @@ Some background text.
 
 Our approach details.
 """
-    chunks = chunk_text_by_sections(content)
+    chunks = chunk_text_by_sections(content, min_chunk_size=0)
     assert len(chunks) == 2
     _, h0 = chunks[0]
     _, h1 = chunks[1]
@@ -85,7 +85,7 @@ Some text here.
 
 More text.
 """
-    chunks = chunk_text_by_sections(content)
+    chunks = chunk_text_by_sections(content, min_chunk_size=0)
     hierarchies = [h for _, h in chunks]
     assert ["Introduction"] in hierarchies
     assert ["Methods"] in hierarchies

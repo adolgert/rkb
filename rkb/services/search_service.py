@@ -591,6 +591,7 @@ class SearchService:
         """
         if mode == "hybrid":
             ranked_docs, all_chunks = self.search_hybrid(query, n_docs=n_docs)
+            self._attach_chunk_counts(ranked_docs)
             stats: dict[str, Any] = {
                 "chunks_fetched": len(all_chunks),
                 "chunks_above_threshold": len(all_chunks),
@@ -642,6 +643,7 @@ class SearchService:
                 "documents_found": len(ranked),
                 "mode": "bm25",
             }
+            self._attach_chunk_counts(ranked[:n_docs])
             return ranked[:n_docs], semantic_chunks, stats
 
         # mode == "semantic" (original behaviour)
@@ -666,6 +668,7 @@ class SearchService:
             )
 
         top_n_docs = ranked_docs[:n_docs]
+        self._attach_chunk_counts(top_n_docs)
         stats["mode"] = "semantic"
 
         LOGGER.info(
@@ -680,6 +683,16 @@ class SearchService:
         )
 
         return top_n_docs, all_chunks, stats
+
+    def _attach_chunk_counts(self, ranked_docs: list[DocumentScore]) -> None:
+        """Look up chunk counts from the registry and attach to DocumentScore objects."""
+        if not ranked_docs or self.registry is None:
+            return
+        doc_ids = [d.doc_id for d in ranked_docs]
+        counts = self.registry.get_chunk_counts(doc_ids)
+        for doc in ranked_docs:
+            if doc.doc_id in counts:
+                doc.total_chunk_count = counts[doc.doc_id]
 
     def search_documents(
         self,

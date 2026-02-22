@@ -198,7 +198,7 @@ def execute(args: argparse.Namespace) -> int:  # noqa: PLR0912
                 continue
 
             # Mirror to rkb_documents.db for search/documents compatibility
-            _upsert_document_record(args.db_path, sha256, display_name, str(md_path))
+            _upsert_document_record(args.db_path, sha256, display_name, str(md_path), len(chunk_texts))
             indexed_count += 1
 
             if verbose:
@@ -234,7 +234,7 @@ def _already_indexed(collection, sha256: str) -> bool:
 
 
 def _upsert_document_record(
-    db_path: Path, sha256: str, title: str, source_path: str
+    db_path: Path, sha256: str, title: str, source_path: str, chunk_count: int
 ) -> None:
     """Upsert a document record into rkb_documents.db for search/documents compat."""
     now = datetime.now(UTC).isoformat()
@@ -254,26 +254,31 @@ def _upsert_document_record(
                 status TEXT,
                 added_date TEXT,
                 updated_date TEXT,
-                project_id TEXT
+                project_id TEXT,
+                chunk_count INTEGER
             )
             """
         )
-        # Add project_id to tables created before this column existed
+        # Add columns to tables created before they existed
         with contextlib.suppress(sqlite3.OperationalError):
             con.execute("ALTER TABLE documents ADD COLUMN project_id TEXT")
+        with contextlib.suppress(sqlite3.OperationalError):
+            con.execute("ALTER TABLE documents ADD COLUMN chunk_count INTEGER")
         con.execute(
             """
             INSERT INTO documents (
-                doc_id, source_path, content_hash, title, status, added_date, updated_date
+                doc_id, source_path, content_hash, title, status,
+                added_date, updated_date, chunk_count
             )
-            VALUES (?, ?, ?, ?, 'extracted', ?, ?)
+            VALUES (?, ?, ?, ?, 'extracted', ?, ?, ?)
             ON CONFLICT(doc_id) DO UPDATE SET
                 source_path=excluded.source_path,
                 title=excluded.title,
                 status='extracted',
-                updated_date=excluded.updated_date
+                updated_date=excluded.updated_date,
+                chunk_count=excluded.chunk_count
             """,
-            (sha256, source_path, sha256, title, now, now),
+            (sha256, source_path, sha256, title, now, now, chunk_count),
         )
         con.commit()
     finally:

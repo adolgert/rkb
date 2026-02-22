@@ -164,28 +164,69 @@ def execute(args: argparse.Namespace) -> int:
         return 1
 
 
+def _format_doc_name(pdf_name: str) -> str:
+    """Parse 'Author - Date - Title.pdf' into a readable label."""
+    name = pdf_name.removesuffix(".pdf")
+    parts = name.split(" - ", 2)
+    if len(parts) == 3:
+        author, date, title = parts
+        return f"{author} | {date} | {title}"
+    return name
+
+
 def _perform_search(search_service: SearchService, query: str, args: argparse.Namespace) -> int:
     """Perform a single search."""
-    # Set up filters
     filter_equations = None
     if args.filter_equations:
         filter_equations = True
     elif args.no_equations:
         filter_equations = False
 
-    # Perform search
-    result = search_service.search_documents(
+    ranked_docs, all_chunks, _stats = search_service.search_documents_ranked(
         query=query,
-        n_results=args.num_results,
+        n_docs=args.num_results,
         filter_equations=filter_equations,
         project_id=getattr(args, "project_id", None),
-        document_ids=getattr(args, "document_ids", None)
+        mode=args.mode,
     )
 
-    # Display results
-    search_service.display_results(result, max_content_length=args.chunklen)
+    if not ranked_docs:
+        print("No results found.")
+        return 1
 
-    return 0 if result.total_results > 0 else 1
+    # Build lookup: doc_id -> pdf_name from chunk metadata
+    doc_pdf_name: dict[str, str] = {}
+    for chunk in all_chunks:
+        doc_id = chunk.metadata.get("doc_id")
+        if doc_id and doc_id not in doc_pdf_name:
+            doc_pdf_name[doc_id] = chunk.metadata.get("pdf_name", doc_id)
+
+    print(f"\n📊 Found {len(ranked_docs)} results for: '{query}'")
+    print("=" * 80)
+
+    for i, doc in enumerate(ranked_docs):
+        display_data = search_service.get_display_data(doc, all_chunks)
+        pdf_name = doc_pdf_name.get(doc.doc_id, doc.doc_id)
+        label = _format_doc_name(pdf_name)
+
+        chunk_info = (
+            f", chunks: {doc.total_chunk_count}"
+            if doc.total_chunk_count is not None
+            else ""
+        )
+        print(f"\n🔖 Result {i + 1} (score: {doc.score:.3f}{chunk_info})")
+        print(f"📄 {label}")
+
+        chunk_text = display_data.get("chunk_text") or ""
+        if chunk_text:
+            content = chunk_text[: args.chunklen]
+            if len(chunk_text) > args.chunklen:
+                content += "..."
+            print(f"📝 Content:\n{content}")
+
+        print("-" * 80)
+
+    return 0
 
 
 def _interactive_search(search_service: SearchService, args: argparse.Namespace) -> int:
