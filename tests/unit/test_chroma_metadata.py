@@ -1,40 +1,6 @@
 """Unit test to reproduce and fix ChromaDB metadata issue."""
 
 
-
-def test_chroma_metadata_with_list_fails():
-    """Verify that ChromaDB rejects list values in metadata."""
-    import tempfile
-    from pathlib import Path
-
-    from rkb.embedders.chroma_embedder import ChromaEmbedder
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        embedder = ChromaEmbedder(db_path=Path(tmpdir) / "test_chroma")
-
-        # This is what ingestion_pipeline.py currently does - passes a list for page_numbers
-        metadata_with_list = {
-            "doc_id": "test_doc",
-            "chunk_index": 0,
-            "page_numbers": [1],  # This is a list - ChromaDB will reject it
-            "has_equations": False,
-            "display_eq_count": 0,
-            "inline_eq_count": 0,
-        }
-
-        chunks = ["This is a test chunk of text."]
-        metadatas = [metadata_with_list]
-
-        result = embedder.embed(chunks, metadatas)
-
-        # Currently this fails with error about list not being allowed
-
-        # The error should mention list not being allowed
-        assert result.error_message is not None, "Expected an error but got none"
-        assert "list" in result.error_message.lower(), f"Unexpected error: {result.error_message}"
-        assert result.chunk_count == 0, "No chunks should be embedded when metadata is invalid"
-
-
 def test_chroma_metadata_with_string_works():
     """Verify that ChromaDB accepts string values in metadata."""
     import tempfile

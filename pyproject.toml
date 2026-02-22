@@ -31,6 +31,7 @@ dependencies = [
     "ollama>=0.1.0",
     "rank-bm25>=0.2.2",
     "sentence-transformers>=3.0",
+    "fastmcp>=3.0.2",
 ]
 
 [project.optional-dependencies]
@@ -118,7 +119,8 @@ root_package = "rkb"
 name = "Layer architecture"
 type = "layers"
 layers = [
-    "rkb.cli | rkb.api",
+    "rkb.cli | rkb.mcp_server",
+    "rkb.api",
     "rkb.services",
     "rkb.pipelines",
     "rkb.extractors | rkb.embedders | rkb.collection",
