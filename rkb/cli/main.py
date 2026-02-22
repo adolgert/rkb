@@ -15,6 +15,7 @@ from rkb.cli.commands import (
     remove_cmd,
     search_cmd,
     status_cmd,
+    topics_cmd,
     translate_cmd,
     triage_cmd,
 )
@@ -146,6 +147,15 @@ Examples:
     )
     remove_cmd.add_arguments(remove_parser)
 
+    # Topics command
+    topics_parser = subparsers.add_parser(
+        "topics",
+        parents=[shared],
+        help="Discover latent topics across the corpus using BERTopic",
+        description="Mean-pool SPECTER2 embeddings per document and cluster with BERTopic",
+    )
+    topics_cmd.add_arguments(topics_parser)
+
     return parser
 
 
@@ -189,6 +199,8 @@ def main(args: list[str] | None = None) -> int:  # noqa: PLR0912
             return status_cmd.execute(parsed_args)
         if parsed_args.command == "remove":
             return remove_cmd.execute(parsed_args)
+        if parsed_args.command == "topics":
+            return topics_cmd.execute(parsed_args)
         print(f"Unknown command: {parsed_args.command}")
         return 1
 
