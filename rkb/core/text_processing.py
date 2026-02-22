@@ -118,8 +118,50 @@ def chunk_text_by_pages(content: str, max_chunk_size: int = 2000) -> list[tuple[
     return chunks
 
 
+def _merge_small_chunks(
+    chunks: list[tuple[str, list[str]]], min_chunk_size: int
+) -> list[tuple[str, list[str]]]:
+    """Merge chunks below min_chunk_size forward into the next chunk.
+
+    A chunk that is too small is prepended to the following chunk, separated
+    by a blank line.  The merged chunk inherits the *next* chunk's section
+    hierarchy (since the content continues there).  If the last chunk is too
+    small it is merged backward into the preceding chunk instead.
+    """
+    if not chunks or min_chunk_size <= 0:
+        return chunks
+
+    merged: list[tuple[str, list[str]]] = []
+    pending_text = ""
+    pending_hierarchy: list[str] = []
+
+    for text, hierarchy in chunks:
+        if pending_text:
+            # Prepend the pending small chunk to this one
+            text = pending_text + "\n\n" + text
+            pending_text = ""
+            pending_hierarchy = []
+
+        if len(text) < min_chunk_size:
+            # Hold this chunk and try to merge it with the next one
+            pending_text = text
+            pending_hierarchy = hierarchy
+        else:
+            merged.append((text, hierarchy))
+
+    # Handle leftover: merge backward into the last kept chunk
+    if pending_text:
+        if merged:
+            last_text, last_hierarchy = merged[-1]
+            merged[-1] = (last_text + "\n\n" + pending_text, last_hierarchy)
+        else:
+            merged.append((pending_text, pending_hierarchy))
+
+    return merged
+
+
 def chunk_text_by_sections(
-    content: str, max_chunk_size: int = 3000
+    content: str, max_chunk_size: int = 3000, min_chunk_size: int = 200
 ) -> list[tuple[str, list[str]]]:
     """Split markdown content into section-based chunks with section hierarchy.
 
@@ -129,9 +171,13 @@ def chunk_text_by_sections(
     Strips bold wrappers from heading text (e.g. ``## **Introduction**``
     becomes ``Introduction``).
 
+    Chunks smaller than min_chunk_size are merged forward into the next chunk
+    so that section-header-only chunks do not become standalone embeddings.
+
     Args:
         content: Text content to chunk (markdown format)
         max_chunk_size: Maximum size per chunk in characters
+        min_chunk_size: Chunks shorter than this are merged into the next chunk
 
     Returns:
         List of (chunk_text, section_hierarchy) tuples where section_hierarchy
@@ -205,7 +251,7 @@ def chunk_text_by_sections(
     if not chunks:
         return [(content, [])]
 
-    return chunks
+    return _merge_small_chunks(chunks, min_chunk_size)
 
 
 def create_chunk_metadata(

@@ -1,5 +1,6 @@
 """Document registry for tracking processed documents with SQLite backend."""
 
+import contextlib
 import logging
 import sqlite3
 from datetime import datetime
@@ -98,6 +99,10 @@ class DocumentRegistry:
                     FOREIGN KEY (extraction_id) REFERENCES extractions (extraction_id)
                 )
             """)
+
+            # Migrate: add project_id if the table predates this column
+            with contextlib.suppress(sqlite3.OperationalError):
+                conn.execute("ALTER TABLE documents ADD COLUMN project_id TEXT")
 
             # Create indexes for better performance
             conn.execute(

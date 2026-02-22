@@ -713,11 +713,19 @@ class SearchService:
             if document_ids is not None:
                 where_filter["doc_id"] = {"$in": document_ids}
 
-            # Perform search using query text (let Chroma handle embedding)
-            search_kwargs = {
-                "query_texts": [query],
-                "n_results": min(n_results, 100),  # Reasonable limit
-            }
+            # Use explicit query embeddings if the embedder supports it,
+            # otherwise fall back to query_texts.
+            query_vector = self.embedder.embed_query(query)
+            if query_vector is not None:
+                search_kwargs = {
+                    "query_embeddings": [query_vector],
+                    "n_results": min(n_results, 100),
+                }
+            else:
+                search_kwargs = {
+                    "query_texts": [query],
+                    "n_results": min(n_results, 100),
+                }
 
             if where_filter:
                 search_kwargs["where"] = where_filter
@@ -958,7 +966,7 @@ class SearchService:
         self,
         search_result: SearchResult,
         show_content: bool = True,
-        max_content_length: int = 300,
+        max_content_length: int = 500,
     ) -> None:
         """Display search results in a readable format.
 
@@ -990,19 +998,15 @@ class SearchService:
             # Extract common metadata fields
             metadata = chunk.metadata
             if "pdf_name" in metadata:
-                chunk_idx = metadata.get("chunk_index", "?")
-                msg = f"📄 Source: {metadata['pdf_name']} (chunk {chunk_idx})"
-                print(msg)  # noqa: T201
+                name = metadata["pdf_name"].removesuffix(".pdf")
+                parts = name.split(" - ", 2)
+                if len(parts) == 3:
+                    author, date, title = parts
+                    print(f"📄 {author} | {date} | {title}")  # noqa: T201
+                else:
+                    print(f"📄 {name}")  # noqa: T201
             elif "doc_id" in metadata:
-                msg = f"📄 Document: {metadata['doc_id']}"
-                print(msg)  # noqa: T201
-
-            if "has_equations" in metadata:
-                eq_display = metadata.get("display_eq_count", 0)
-                eq_inline = metadata.get("inline_eq_count", 0)
-                has_eq = "✓" if metadata["has_equations"] else "✗"
-                msg = f"🧮 Equations: {has_eq} (Display: {eq_display}, Inline: {eq_inline})"
-                print(msg)  # noqa: T201
+                print(f"📄 {metadata['doc_id']}")  # noqa: T201
 
             if show_content:
                 content = chunk.content[:max_content_length]

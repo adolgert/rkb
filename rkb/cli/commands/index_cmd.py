@@ -2,6 +2,7 @@
 # ruff: noqa: T201
 
 import argparse
+import contextlib
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -28,8 +29,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--vector-db-path",
         type=Path,
-        default="rkb_chroma_db",
-        help="Path to vector database (default: rkb_chroma_db)"
+        default=None,
+        help="Path to vector database (default: <library>/sha256/rkb_chroma_db)"
     )
 
     parser.add_argument(
@@ -47,8 +48,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--db-path",
         type=Path,
-        default="rkb_documents.db",
-        help="Path to document registry database (default: rkb_documents.db)"
+        default=None,
+        help="Path to document registry database (default: <library>/sha256/rkb_documents.db)"
     )
 
     parser.add_argument(
@@ -61,6 +62,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 def execute(args: argparse.Namespace) -> int:  # noqa: PLR0912
     """Execute the index command."""
     try:
+        from rkb.collection.config import CollectionConfig
+        config = CollectionConfig.load(getattr(args, "config", None))
+        sha256_dir = config.library_root / "sha256"
+        if args.vector_db_path is None:
+            args.vector_db_path = sha256_dir / "rkb_chroma_db"
+        if args.db_path is None:
+            args.db_path = sha256_dir / "rkb_documents.db"
+
         rebuild = getattr(args, "rebuild", False)
         verbose = getattr(args, "verbose", False)
 
@@ -104,6 +113,8 @@ def execute(args: argparse.Namespace) -> int:  # noqa: PLR0912
             display_name = row["display_name"] if row else sha256[:16]
             hash_dir = canonical_dir(config.library_root, sha256)
             mds = sorted(hash_dir.glob("extractions/marker-pdf-*/extracted.md"))
+            if not mds:
+                mds = sorted(hash_dir.glob("extractions/nougat-ocr-*/extracted.mmd"))
             if not mds:
                 no_md_count += 1
                 if verbose:
@@ -236,12 +247,20 @@ def _upsert_document_record(
                 source_path TEXT,
                 content_hash TEXT,
                 title TEXT,
+                authors TEXT,
+                arxiv_id TEXT,
+                doi TEXT,
+                version INTEGER DEFAULT 1,
                 status TEXT,
                 added_date TEXT,
-                updated_date TEXT
+                updated_date TEXT,
+                project_id TEXT
             )
             """
         )
+        # Add project_id to tables created before this column existed
+        with contextlib.suppress(sqlite3.OperationalError):
+            con.execute("ALTER TABLE documents ADD COLUMN project_id TEXT")
         con.execute(
             """
             INSERT INTO documents (
