@@ -136,11 +136,19 @@ class SearchService:
                     # No more iterations needed - we fetch everything in first iteration
                     break
 
-                # Perform search
-                search_kwargs = {
-                    "query_texts": [query],
-                    "n_results": min(fetch_size, MAX_TOTAL_CHUNKS),
-                }
+                # Perform search — use explicit embeddings when available so
+                # that the query vector matches the stored collection dimension.
+                query_vector = self.embedder.embed_query(query)
+                if query_vector is not None:
+                    search_kwargs: dict = {
+                        "query_embeddings": [query_vector],
+                        "n_results": min(fetch_size, MAX_TOTAL_CHUNKS),
+                    }
+                else:
+                    search_kwargs = {
+                        "query_texts": [query],
+                        "n_results": min(fetch_size, MAX_TOTAL_CHUNKS),
+                    }
 
                 if where_filter:
                     search_kwargs["where"] = where_filter

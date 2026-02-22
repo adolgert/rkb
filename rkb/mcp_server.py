@@ -12,6 +12,7 @@ Or via fastmcp dev mode::
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass, field
 
 from fastmcp import FastMCP
@@ -107,13 +108,28 @@ mcp = FastMCP("RKB Knowledge Base")
 
 _config = CollectionConfig.load(None)
 _sha256_dir = _config.library_root / "sha256"
+
+# KnowledgeBase and ChunkStore are thread-safe: DocumentRegistry and
+# ChunkStore both open a fresh SQLite connection per method call.
 _kb = KnowledgeBase(
     db_path=_sha256_dir / "rkb_chroma_db",
     registry_path=_sha256_dir / "rkb_documents.db",
 )
-_catalog = Catalog(_config.catalog_db)
-_catalog.initialize()
 _chunks = ChunkStore(_sha256_dir / "rkb_chunks.db")
+
+# Catalog caches its SQLite connection on the instance, which makes it
+# unsafe to share across threads.  Use thread-local storage so each
+# FastMCP worker thread gets its own connection.
+_thread_local = threading.local()
+
+
+def _get_catalog() -> Catalog:
+    """Return a per-thread Catalog instance, creating it on first access."""
+    if not hasattr(_thread_local, "catalog"):
+        cat = Catalog(_config.catalog_db)
+        cat.initialize()
+        _thread_local.catalog = cat
+    return _thread_local.catalog
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +139,7 @@ _chunks = ChunkStore(_sha256_dir / "rkb_chunks.db")
 
 def _resolved_meta(doc_id: str) -> dict:
     """Return resolved metadata dict, defaulting to empty dict if absent."""
-    meta = _catalog.get_resolved_metadata(doc_id)
+    meta = _get_catalog().get_resolved_metadata(doc_id)
     return meta if meta is not None else {}
 
 
@@ -149,7 +165,7 @@ def search_knowledge_base(query: str, mode: str, max_results: int) -> list[Searc
     results: list[SearchHit] = []
     for hit in api_hits:
         doc_id = hit.doc_id
-        catalog_row = _catalog.get_canonical_file(doc_id)
+        catalog_row = _get_catalog().get_canonical_file(doc_id)
         meta = _resolved_meta(doc_id)
 
         page_cnt: int | None = None
@@ -253,7 +269,7 @@ def get_document(doc_id: str) -> DocumentInfo:
         DocumentInfo with all available metadata fields. Fields that could
         not be determined are None or empty.
     """
-    catalog_row = _catalog.get_canonical_file(doc_id)
+    catalog_row = _get_catalog().get_canonical_file(doc_id)
     meta = _resolved_meta(doc_id)
 
     title = meta.get("title") or ""

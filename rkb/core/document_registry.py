@@ -100,13 +100,18 @@ class DocumentRegistry:
                 )
             """)
 
-            # Migrate: add project_id if the table predates this column
-            with contextlib.suppress(sqlite3.OperationalError):
-                conn.execute("ALTER TABLE documents ADD COLUMN project_id TEXT")
-
-            # Migrate: add chunk_count if the table predates this column
-            with contextlib.suppress(sqlite3.OperationalError):
-                conn.execute("ALTER TABLE documents ADD COLUMN chunk_count INTEGER")
+            # Migrate: add columns that were added after the initial schema
+            _migrations = [
+                "ALTER TABLE documents ADD COLUMN project_id TEXT",
+                "ALTER TABLE documents ADD COLUMN chunk_count INTEGER",
+                "ALTER TABLE documents ADD COLUMN authors TEXT",
+                "ALTER TABLE documents ADD COLUMN arxiv_id TEXT",
+                "ALTER TABLE documents ADD COLUMN doi TEXT",
+                "ALTER TABLE documents ADD COLUMN version INTEGER DEFAULT 1",
+            ]
+            for _stmt in _migrations:
+                with contextlib.suppress(sqlite3.OperationalError):
+                    conn.execute(_stmt)
 
             # Create indexes for better performance
             conn.execute(

@@ -35,13 +35,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-nougat = [
-    "nougat-ocr>=0.1.0",
-    "torch>=2.0.0",
-    "torchvision>=0.15.0",
-    "albumentations==1.2.1",  # Required: 1.2.1 for compatibility with nougat-ocr
-    "transformers==4.38.2",  # Required: 4.38.2 is last version compatible with nougat-ocr
-    "pymupdf>=1.23.0",  # Required for PDF page counting
+marker = [
+    "marker-pdf>=1.0",
 ]
 pdf = [
     "pymupdf>=1.23.0",
@@ -79,7 +74,7 @@ dev = [
     "pre-commit>=3.0.0",
 ]
 all = [
-    "rkb[nougat,pdf,latex,api,zotero,triage,topics,dev]"
+    "rkb[marker,pdf,latex,api,zotero,triage,topics,dev]"
 ]
 
 [project.scripts]
