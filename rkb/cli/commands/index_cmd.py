@@ -69,6 +69,7 @@ def execute(args: argparse.Namespace) -> int:  # noqa: PLR0912
             args.vector_db_path = sha256_dir / "rkb_chroma_db"
         if args.db_path is None:
             args.db_path = sha256_dir / "rkb_documents.db"
+        chunks_db_path = sha256_dir / "rkb_chunks.db"
 
         rebuild = getattr(args, "rebuild", False)
         verbose = getattr(args, "verbose", False)
@@ -147,8 +148,10 @@ def execute(args: argparse.Namespace) -> int:  # noqa: PLR0912
             chroma_collection = None
 
         # Initialize embedder
+        from rkb.core.chunk_store import ChunkStore
         from rkb.embedders import get_embedder
 
+        chunk_store = ChunkStore(chunks_db_path)
         embedder = get_embedder(
             args.embedder,
             collection_name=args.collection_name,
@@ -197,8 +200,13 @@ def execute(args: argparse.Namespace) -> int:  # noqa: PLR0912
                 print(f"  Warning: embedding failed for {display_name}: {result.error_message}")
                 continue
 
+            # Persist chunk text to rkb_chunks.db
+            chunk_store.upsert_chunks(sha256, list(enumerate(chunk_texts)))
+
             # Mirror to rkb_documents.db for search/documents compatibility
-            _upsert_document_record(args.db_path, sha256, display_name, str(md_path), len(chunk_texts))
+            _upsert_document_record(
+                args.db_path, sha256, display_name, str(md_path), len(chunk_texts)
+            )
             indexed_count += 1
 
             if verbose:

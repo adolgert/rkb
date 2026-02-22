@@ -206,6 +206,7 @@ def execute(args: argparse.Namespace) -> int:
         args.db_path = sha256_dir / "rkb_documents.db"
     if args.vector_db_path is None:
         args.vector_db_path = sha256_dir / "rkb_chroma_db"
+    chunks_db_path = sha256_dir / "rkb_chunks.db"
 
     catalog = Catalog(config.catalog_db)
     catalog.initialize()
@@ -263,6 +264,11 @@ def execute(args: argparse.Namespace) -> int:
 
     # 3. Delete from Chroma vector DB
     chunk_count = _delete_from_chroma(args.vector_db_path, args.collection_name, sha256)
+
+    # 3b. Delete from rkb_chunks.db
+    if chunks_db_path.exists():
+        from rkb.core.chunk_store import ChunkStore
+        ChunkStore(chunks_db_path).delete_doc(sha256)
 
     # 4. Delete filesystem directory
     if hash_dir.exists():
