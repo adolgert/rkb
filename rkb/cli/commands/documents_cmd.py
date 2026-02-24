@@ -21,15 +21,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--db-path",
         type=Path,
-        default="rkb_documents.db",
-        help="Path to document registry database (default: rkb_documents.db)"
+        default=None,
+        help="Path to document registry database (default: <library>/sha256/rkb_documents.db)"
     )
 
     parser.add_argument(
         "--vector-db-path",
         type=Path,
-        default="rkb_chroma_db",
-        help="Path to vector database (default: rkb_chroma_db)"
+        default=None,
+        help="Path to vector database (default: <library>/sha256/rkb_chroma_db)"
     )
 
     parser.add_argument(
@@ -41,8 +41,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--embedder",
         choices=["chroma", "ollama", "specter2"],
-        default="chroma",
-        help="Embedder to use (default: chroma)"
+        default="specter2",
+        help="Embedder to use (default: specter2)"
     )
 
     parser.add_argument(
@@ -104,6 +104,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 def execute(args: argparse.Namespace) -> int:
     """Execute the documents search command."""
+    from rkb.collection.config import CollectionConfig
+    config = CollectionConfig.load(getattr(args, "config", None))
+    sha256_dir = config.library_root / "sha256"
+    if args.vector_db_path is None:
+        args.vector_db_path = sha256_dir / "rkb_chroma_db"
+    if args.db_path is None:
+        args.db_path = sha256_dir / "rkb_documents.db"
+
     # Check if database exists
     if not args.vector_db_path.exists():
         print("✗ Vector database not found. Run 'rkb pipeline' or 'rkb index' first.")
