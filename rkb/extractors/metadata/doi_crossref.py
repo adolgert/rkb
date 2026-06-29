@@ -45,7 +45,7 @@ class DOICrossRefExtractor(MetadataExtractor):
                 return DocumentMetadata(extractor=self.name)
 
             # Query CrossRef API
-            return self._query_crossref(doi)
+            return self.query_crossref(doi)
 
         except Exception:
             return DocumentMetadata(extractor=self.name)
@@ -70,7 +70,7 @@ class DOICrossRefExtractor(MetadataExtractor):
 
         return None
 
-    def _query_crossref(self, doi: str) -> DocumentMetadata:
+    def query_crossref(self, doi: str) -> DocumentMetadata:
         """Query CrossRef API for DOI metadata.
 
         Args:

@@ -1,12 +1,19 @@
 """Document registry for tracking processed documents with SQLite backend."""
 
+import contextlib
 import logging
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from rkb.core.models import Document, DocumentStatus, EmbeddingResult, ExtractionResult, ExtractionStatus
+from rkb.core.models import (
+    Document,
+    DocumentStatus,
+    EmbeddingResult,
+    ExtractionResult,
+    ExtractionStatus,
+)
 
 LOGGER = logging.getLogger("rkb.core.document_registry")
 
@@ -92,6 +99,19 @@ class DocumentRegistry:
                     FOREIGN KEY (extraction_id) REFERENCES extractions (extraction_id)
                 )
             """)
+
+            # Migrate: add columns that were added after the initial schema
+            _migrations = [
+                "ALTER TABLE documents ADD COLUMN project_id TEXT",
+                "ALTER TABLE documents ADD COLUMN chunk_count INTEGER",
+                "ALTER TABLE documents ADD COLUMN authors TEXT",
+                "ALTER TABLE documents ADD COLUMN arxiv_id TEXT",
+                "ALTER TABLE documents ADD COLUMN doi TEXT",
+                "ALTER TABLE documents ADD COLUMN version INTEGER DEFAULT 1",
+            ]
+            for _stmt in _migrations:
+                with contextlib.suppress(sqlite3.OperationalError):
+                    conn.execute(_stmt)
 
             # Create indexes for better performance
             conn.execute(
@@ -614,3 +634,27 @@ class DocumentRegistry:
                 "total_embeddings": total_embeddings,
                 "total_chunks_embedded": total_chunks,
             }
+
+    def get_chunk_counts(self, doc_ids: list[str]) -> dict[str, int]:
+        """Return {doc_id: chunk_count} for the given doc_ids.
+
+        Only doc_ids with a non-NULL chunk_count are included in the result.
+        """
+        if not doc_ids:
+            return {}
+        placeholders = ",".join("?" * len(doc_ids))
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                f"SELECT doc_id, chunk_count FROM documents"
+                f" WHERE doc_id IN ({placeholders}) AND chunk_count IS NOT NULL",
+                doc_ids,
+            ).fetchall()
+        return {doc_id: count for doc_id, count in rows}
+
+    def set_chunk_count(self, doc_id: str, chunk_count: int) -> None:
+        """Update chunk_count for a document."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "UPDATE documents SET chunk_count = ? WHERE doc_id = ?",
+                (chunk_count, doc_id),
+            )

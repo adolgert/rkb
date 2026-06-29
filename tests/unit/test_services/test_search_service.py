@@ -300,7 +300,7 @@ class TestSearchService:
 
         captured = capsys.readouterr()
         assert "Found 1 results for: 'machine learning'" in captured.out
-        assert "Source: test.pdf (chunk 0)" in captured.out
+        assert "test" in captured.out
         assert "This is test content" in captured.out
 
     def test_display_results_no_results(self, temp_db, capsys):

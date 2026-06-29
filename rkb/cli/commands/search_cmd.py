@@ -5,6 +5,7 @@ import argparse
 from pathlib import Path
 
 from rkb.core.document_registry import DocumentRegistry
+from rkb.services.bm25_index import BM25Index
 from rkb.services.search_service import SearchService
 
 
@@ -19,15 +20,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--db-path",
         type=Path,
-        default="rkb_documents.db",
-        help="Path to document registry database (default: rkb_documents.db)"
+        default=None,
+        help="Path to document registry database (default: <library>/sha256/rkb_documents.db)"
     )
 
     parser.add_argument(
         "--vector-db-path",
         type=Path,
-        default="rkb_chroma_db",
-        help="Path to vector database (default: rkb_chroma_db)"
+        default=None,
+        help="Path to vector database (default: <library>/sha256/rkb_chroma_db)"
     )
 
     parser.add_argument(
@@ -38,9 +39,16 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument(
         "--embedder",
-        choices=["chroma", "ollama"],
-        default="chroma",
-        help="Embedder to use (default: chroma)"
+        choices=["chroma", "ollama", "specter2"],
+        default="specter2",
+        help="Embedder to use (default: specter2)"
+    )
+
+    parser.add_argument(
+        "--mode",
+        choices=["hybrid", "semantic", "bm25"],
+        default="hybrid",
+        help="Search mode: hybrid (BM25 + semantic), semantic, or bm25 (default: hybrid)"
     )
 
     parser.add_argument(
@@ -74,6 +82,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
+        "--chunklen",
+        type=int,
+        default=500,
+        help="Maximum characters of chunk content to display (default: 500)"
+    )
+
+    parser.add_argument(
         "--interactive", "-i",
         action="store_true",
         help="Start interactive search mode"
@@ -88,6 +103,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 def execute(args: argparse.Namespace) -> int:
     """Execute the search command."""
+    from rkb.collection.config import CollectionConfig
+    config = CollectionConfig.load(getattr(args, "config", None))
+    sha256_dir = config.library_root / "sha256"
+    if args.vector_db_path is None:
+        args.vector_db_path = sha256_dir / "rkb_chroma_db"
+    if args.db_path is None:
+        args.db_path = sha256_dir / "rkb_documents.db"
+
     # Check if database exists
     if not args.vector_db_path.exists():
         print("✗ Vector database not found. Run 'rkb pipeline' or 'rkb index' first.")
@@ -96,11 +119,14 @@ def execute(args: argparse.Namespace) -> int:
     try:
         # Initialize services
         registry = DocumentRegistry(args.db_path)
+        bm25 = BM25Index(args.vector_db_path)
+        bm25.load()
         search_service = SearchService(
             db_path=args.vector_db_path,
             collection_name=args.collection_name,
             embedder_name=args.embedder,
-            registry=registry
+            registry=registry,
+            bm25_index=bm25,
         )
 
         # Handle stats request
@@ -138,28 +164,69 @@ def execute(args: argparse.Namespace) -> int:
         return 1
 
 
+def _format_doc_name(pdf_name: str) -> str:
+    """Parse 'Author - Date - Title.pdf' into a readable label."""
+    name = pdf_name.removesuffix(".pdf")
+    parts = name.split(" - ", 2)
+    if len(parts) == 3:
+        author, date, title = parts
+        return f"{author} | {date} | {title}"
+    return name
+
+
 def _perform_search(search_service: SearchService, query: str, args: argparse.Namespace) -> int:
     """Perform a single search."""
-    # Set up filters
     filter_equations = None
     if args.filter_equations:
         filter_equations = True
     elif args.no_equations:
         filter_equations = False
 
-    # Perform search
-    result = search_service.search_documents(
+    ranked_docs, all_chunks, _stats = search_service.search_documents_ranked(
         query=query,
-        n_results=args.num_results,
+        n_docs=args.num_results,
         filter_equations=filter_equations,
         project_id=getattr(args, "project_id", None),
-        document_ids=getattr(args, "document_ids", None)
+        mode=args.mode,
     )
 
-    # Display results
-    search_service.display_results(result)
+    if not ranked_docs:
+        print("No results found.")
+        return 1
 
-    return 0 if result.total_results > 0 else 1
+    # Build lookup: doc_id -> pdf_name from chunk metadata
+    doc_pdf_name: dict[str, str] = {}
+    for chunk in all_chunks:
+        doc_id = chunk.metadata.get("doc_id")
+        if doc_id and doc_id not in doc_pdf_name:
+            doc_pdf_name[doc_id] = chunk.metadata.get("pdf_name", doc_id)
+
+    print(f"\n📊 Found {len(ranked_docs)} results for: '{query}'")
+    print("=" * 80)
+
+    for i, doc in enumerate(ranked_docs):
+        display_data = search_service.get_display_data(doc, all_chunks)
+        pdf_name = doc_pdf_name.get(doc.doc_id, doc.doc_id)
+        label = _format_doc_name(pdf_name)
+
+        chunk_info = (
+            f", chunks: {doc.total_chunk_count}"
+            if doc.total_chunk_count is not None
+            else ""
+        )
+        print(f"\n🔖 Result {i + 1} (score: {doc.score:.3f}{chunk_info})")
+        print(f"📄 {label}")
+
+        chunk_text = display_data.get("chunk_text") or ""
+        if chunk_text:
+            content = chunk_text[: args.chunklen]
+            if len(chunk_text) > args.chunklen:
+                content += "..."
+            print(f"📝 Content:\n{content}")
+
+        print("-" * 80)
+
+    return 0
 
 
 def _interactive_search(search_service: SearchService, args: argparse.Namespace) -> int:

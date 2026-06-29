@@ -4,9 +4,6 @@
 import argparse
 from pathlib import Path
 
-from rkb.core.document_registry import DocumentRegistry
-from rkb.services.project_service import ProjectService
-
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     """Add command-specific arguments."""
@@ -43,40 +40,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def execute(args: argparse.Namespace) -> int:
+def execute(_args: argparse.Namespace) -> int:
     """Execute the find command."""
-    try:
-        # Initialize services
-        registry = DocumentRegistry(args.db_path)
-        project_service = ProjectService(registry)
-
-        # Find recent PDFs
-        files = project_service.find_recent_pdfs(
-            data_dir=args.data_dir,
-            num_files=args.num_files,
-            output_file=args.output_file,
-            project_id=args.project_id
-        )
-
-        # Display results
-        print(f"\n📄 Found {len(files)} recent PDF files:")
-        for i, file_info in enumerate(files[:20], 1):
-            print(
-                f"  {i:2d}. {file_info['name']} ({file_info['size_mb']:.1f} MB) - "
-                f"{file_info['modified_date']}"
-            )
-
-        if len(files) > 20:
-            print(f"  ... and {len(files) - 20} more files")
-
-        if args.output_file:
-            print(f"\n💾 File list saved to: {args.output_file}")
-
-        return 0
-
-    except Exception as e:
-        print(f"✗ Find command failed: {e}")
-        if args.verbose:
-            import traceback
-            traceback.print_exc()
-        return 1
+    print("This command is deprecated. Use 'rkb translate' + 'rkb index' instead.")
+    return 1

@@ -19,29 +19,27 @@ class FakeZotero:
 
     def __init__(self):
         self.created: list[dict] = []
-        self.attachments: list[tuple[list[str], str]] = []
+        self.attachments: list[tuple[list[str], str | None]] = []
         self.item_counter = 0
         self.attachment_counter = 0
-        self.failures_by_title: dict[str, list[Exception]] = {}
+        self.attachment_failures: list[Exception] = []
 
     def item_template(self, _item_type):
         return {"title": ""}
 
     def create_items(self, items):
         title = items[0]["title"]
-        failures = self.failures_by_title.get(title)
-        if failures:
-            raise failures.pop(0)
-
         self.item_counter += 1
         item_key = f"ITEM{self.item_counter}"
         self.created.append({"title": title, "item_key": item_key})
         return {"successful": {"0": {"key": item_key}}}
 
-    def attachment_simple(self, file_paths, item_key):
+    def attachment_simple(self, file_paths, parentid=None):
+        if self.attachment_failures:
+            raise self.attachment_failures.pop(0)
         self.attachment_counter += 1
         attachment_key = f"ATT{self.attachment_counter}"
-        self.attachments.append((file_paths, item_key))
+        self.attachments.append((file_paths, parentid))
         return {"successful": {"0": {"key": attachment_key}}}
 
 
@@ -69,10 +67,10 @@ def test_import_to_zotero_calls_client(tmp_path):
 
     item_key, attachment_key = import_to_zotero(pdf_path, "Display Name.pdf", zot)
 
-    assert item_key == "ITEM1"
+    assert item_key is None
     assert attachment_key == "ATT1"
-    assert zot.created[0]["title"] == "Display Name.pdf"
-    assert zot.attachments[0] == ([str(pdf_path)], "ITEM1")
+    assert len(zot.created) == 0
+    assert zot.attachments[0] == ([str(pdf_path)], None)
 
 
 def test_is_in_zotero():
@@ -124,8 +122,8 @@ def test_sync_batch_to_zotero_imports_only_missing(tmp_path):
     )
 
     assert summary == {"imported": 1, "skipped": 1, "failed": 0}
-    assert len(zot.created) == 1
-    assert zot.created[0]["title"] == "missing.pdf"
+    assert len(zot.created) == 0
+    assert len(zot.attachments) == 1
 
     unlinked = catalog.get_unlinked_to_zotero()
     assert existing_hash not in unlinked
@@ -156,7 +154,7 @@ def test_sync_batch_to_zotero_retries_on_429(tmp_path):
     )
 
     zot = FakeZotero()
-    zot.failures_by_title["retry.pdf"] = [RateLimitError("429"), RateLimitError("429")]
+    zot.attachment_failures = [RateLimitError("429"), RateLimitError("429")]
     sleeps: list[float] = []
 
     summary = sync_batch_to_zotero(
@@ -198,7 +196,7 @@ def test_sync_batch_to_zotero_marks_failed_after_retry_exhaustion(tmp_path):
     )
 
     zot = FakeZotero()
-    zot.failures_by_title["fail.pdf"] = [RateLimitError("429"), RateLimitError("429")]
+    zot.attachment_failures = [RateLimitError("429"), RateLimitError("429")]
 
     summary = sync_batch_to_zotero(
         hashes_to_import=[content_hash],

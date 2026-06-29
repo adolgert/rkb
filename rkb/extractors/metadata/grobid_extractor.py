@@ -107,6 +107,21 @@ class GrobidExtractor(MetadataExtractor):
                 if meeting_elem is not None and meeting_elem.text:
                     journal = meeting_elem.text
 
+            # Extract abstract
+            abstract = None
+            abstract_elem = root.find(".//tei:profileDesc/tei:abstract", ns)
+            if abstract_elem is not None:
+                # Collect all text from <p> children or the element itself
+                paragraphs = abstract_elem.findall(".//tei:p", ns)
+                if paragraphs:
+                    abstract = " ".join(
+                        p.text.strip() for p in paragraphs if p.text and p.text.strip()
+                    )
+                elif abstract_elem.text and abstract_elem.text.strip():
+                    abstract = abstract_elem.text.strip()
+                if abstract == "":
+                    abstract = None
+
             # Extract document type (GROBID doesn't always provide this)
             doc_type = None
 
@@ -116,6 +131,7 @@ class GrobidExtractor(MetadataExtractor):
                 authors=authors if authors else None,
                 year=year,
                 journal=journal,
+                abstract=abstract,
                 page_count=None,
                 extractor=self.name,
             )

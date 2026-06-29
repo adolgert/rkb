@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -88,6 +89,32 @@ class Catalog:
                     source_path TEXT,
                     detail TEXT,
                     timestamp TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS metadata_sources (
+                    content_sha256 TEXT NOT NULL,
+                    extractor_name TEXT NOT NULL,
+                    title TEXT,
+                    authors_json TEXT,
+                    year INTEGER,
+                    journal TEXT,
+                    abstract TEXT,
+                    raw_json TEXT,
+                    extracted_at TEXT NOT NULL,
+                    PRIMARY KEY (content_sha256, extractor_name)
+                );
+
+                CREATE TABLE IF NOT EXISTS metadata_resolved (
+                    content_sha256 TEXT PRIMARY KEY,
+                    title TEXT,
+                    authors_json TEXT,
+                    year INTEGER,
+                    journal TEXT,
+                    abstract TEXT,
+                    doc_type TEXT,
+                    resolution_method TEXT,
+                    source_extractors_json TEXT,
+                    resolved_at TEXT NOT NULL
                 );
             """
         )
@@ -304,3 +331,160 @@ class Catalog:
             (safe_limit,),
         ).fetchall()
         return [dict(row) for row in rows]
+
+    def add_metadata_source(
+        self,
+        content_sha256: str,
+        extractor_name: str,
+        *,
+        title: str | None = None,
+        authors: list[str] | None = None,
+        year: int | None = None,
+        journal: str | None = None,
+        abstract: str | None = None,
+        raw_json: str | None = None,
+    ) -> None:
+        """Insert or update one extractor's metadata for a content hash."""
+        connection = self._connect()
+        authors_json = json.dumps(authors) if authors is not None else None
+        connection.execute(
+            """
+                INSERT INTO metadata_sources (
+                    content_sha256, extractor_name, title, authors_json,
+                    year, journal, abstract, raw_json, extracted_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(content_sha256, extractor_name)
+                DO UPDATE SET
+                    title = excluded.title,
+                    authors_json = excluded.authors_json,
+                    year = excluded.year,
+                    journal = excluded.journal,
+                    abstract = excluded.abstract,
+                    raw_json = excluded.raw_json,
+                    extracted_at = excluded.extracted_at
+            """,
+            (
+                content_sha256,
+                extractor_name,
+                title,
+                authors_json,
+                year,
+                journal,
+                abstract,
+                raw_json,
+                _utc_now_iso(),
+            ),
+        )
+        connection.commit()
+
+    def get_metadata_sources(self, content_sha256: str) -> list[dict]:
+        """Return all extractor results for a content hash."""
+        rows = self._connect().execute(
+            "SELECT * FROM metadata_sources WHERE content_sha256 = ? ORDER BY extractor_name",
+            (content_sha256,),
+        ).fetchall()
+        result = []
+        for row in rows:
+            d = dict(row)
+            if d.get("authors_json"):
+                d["authors"] = json.loads(d["authors_json"])
+            else:
+                d["authors"] = None
+            result.append(d)
+        return result
+
+    def set_resolved_metadata(
+        self,
+        content_sha256: str,
+        *,
+        title: str | None = None,
+        authors: list[str] | None = None,
+        year: int | None = None,
+        journal: str | None = None,
+        abstract: str | None = None,
+        doc_type: str | None = None,
+        resolution_method: str = "rule_based",
+        source_extractors: list[str] | None = None,
+    ) -> None:
+        """Insert or update the resolved (merged) metadata for a content hash."""
+        connection = self._connect()
+        authors_json = json.dumps(authors) if authors is not None else None
+        extractors_json = json.dumps(source_extractors) if source_extractors is not None else None
+        connection.execute(
+            """
+                INSERT INTO metadata_resolved (
+                    content_sha256, title, authors_json, year, journal,
+                    abstract, doc_type, resolution_method,
+                    source_extractors_json, resolved_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(content_sha256)
+                DO UPDATE SET
+                    title = excluded.title,
+                    authors_json = excluded.authors_json,
+                    year = excluded.year,
+                    journal = excluded.journal,
+                    abstract = excluded.abstract,
+                    doc_type = excluded.doc_type,
+                    resolution_method = excluded.resolution_method,
+                    source_extractors_json = excluded.source_extractors_json,
+                    resolved_at = excluded.resolved_at
+            """,
+            (
+                content_sha256,
+                title,
+                authors_json,
+                year,
+                journal,
+                abstract,
+                doc_type,
+                resolution_method,
+                extractors_json,
+                _utc_now_iso(),
+            ),
+        )
+        connection.commit()
+
+    def get_resolved_metadata(self, content_sha256: str) -> dict | None:
+        """Return the resolved metadata for a content hash, if present."""
+        row = self._connect().execute(
+            "SELECT * FROM metadata_resolved WHERE content_sha256 = ?",
+            (content_sha256,),
+        ).fetchone()
+        if row is None:
+            return None
+        d = dict(row)
+        if d.get("authors_json"):
+            d["authors"] = json.loads(d["authors_json"])
+        else:
+            d["authors"] = None
+        if d.get("source_extractors_json"):
+            d["source_extractors"] = json.loads(d["source_extractors_json"])
+        else:
+            d["source_extractors"] = None
+        return d
+
+    def update_display_name(
+        self, content_sha256: str, display_name: str, canonical_path: str
+    ) -> None:
+        """Update display_name and canonical_path for a canonical file."""
+        connection = self._connect()
+        connection.execute(
+            "UPDATE canonical_files SET display_name = ?, canonical_path = ? "
+            "WHERE content_sha256 = ?",
+            (display_name, canonical_path, content_sha256),
+        )
+        connection.commit()
+
+    def get_unresolved_hashes(self) -> list[str]:
+        """Return content hashes that have no resolved metadata yet."""
+        rows = self._connect().execute(
+            """
+                SELECT c.content_sha256
+                FROM canonical_files AS c
+                LEFT JOIN metadata_resolved AS m
+                    ON m.content_sha256 = c.content_sha256
+                WHERE m.content_sha256 IS NULL
+                ORDER BY c.content_sha256
+            """
+        ).fetchall()
+        return [row["content_sha256"] for row in rows]

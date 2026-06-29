@@ -22,6 +22,7 @@ class DocumentMetadata:
     authors: list[str] | None = None
     year: int | None = None
     journal: str | None = None
+    abstract: str | None = None
     page_count: int | None = None
     extractor: str = ""
 

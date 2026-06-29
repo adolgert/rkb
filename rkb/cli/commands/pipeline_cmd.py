@@ -2,13 +2,7 @@
 # ruff: noqa: T201
 
 import argparse
-import time
-from datetime import datetime
 from pathlib import Path
-
-from rkb.core.document_registry import DocumentRegistry
-from rkb.pipelines.complete_pipeline import CompletePipeline
-from rkb.services.project_service import ProjectService
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -113,135 +107,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def execute(args: argparse.Namespace) -> int:
+def execute(_args: argparse.Namespace) -> int:
     """Execute the pipeline command."""
-    print("🚀 RKB PDF Processing Pipeline")
-    print("=" * 50)
-    print(f"📁 Source directory: {args.data_dir}")
-    print(f"📄 Number of files: {args.num_files}")
-    print(f"📖 Max pages per PDF: {args.max_pages}")
-    print(f"🔄 Force reprocess: {args.force_reprocess}")
-    print(f"🧪 Dry run: {args.dry_run}")
-    print(f"⚙️  Extractor: {args.extractor}")
-    print(f"🔗 Embedder: {args.embedder}")
-    print()
-
-    start_time = time.time()
-
-    try:
-        # Initialize registry
-        registry = DocumentRegistry(args.db_path)
-
-        # Handle project creation/selection
-        project_id = args.project_id
-        if args.project_name:
-            project_service = ProjectService(registry)
-            project_id = project_service.create_project(
-                project_name=args.project_name,
-                description=f"Pipeline run on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                data_dir=args.data_dir
-            )
-            print(f"✓ Created project: {project_id}")
-            print()
-
-        # Validate data directory
-        if not args.data_dir.exists():
-            print(f"✗ Data directory not found: {args.data_dir}")
-            return 1
-
-        # Find recent PDFs first
-        project_service = ProjectService(registry)
-        print("📋 Step 1: Finding recent PDFs...")
-
-        try:
-            recent_files = project_service.find_recent_pdfs(
-                data_dir=args.data_dir,
-                num_files=args.num_files,
-                project_id=project_id
-            )
-
-            if not recent_files:
-                print("✗ No PDFs found. Check data directory.")
-                return 1
-
-            print(f"✓ Found {len(recent_files)} recent PDFs")
-
-            if args.dry_run:
-                print("\n🔍 Files that would be processed:")
-                for i, file_info in enumerate(recent_files[:10], 1):
-                    print(f"  {i:2d}. {file_info['name']} ({file_info['size_mb']:.1f} MB)")
-                if len(recent_files) > 10:
-                    print(f"  ... and {len(recent_files) - 10} more files")
-                return 0
-
-        except Exception as e:
-            print(f"✗ Error finding PDFs: {e}")
-            return 1
-
-        print()
-
-        # Step 2: Initialize and run pipeline
-        print("🔄 Step 2: Running processing pipeline...")
-
-        # Determine checkpoint directory
-        checkpoint_dir = (
-            args.checkpoint_dir
-            if hasattr(args, "checkpoint_dir") and args.checkpoint_dir
-            else None
-        )
-
-        pipeline = CompletePipeline(
-            registry=registry,
-            extractor_name=args.extractor,
-            embedder_name=args.embedder,
-            project_id=project_id,
-            checkpoint_dir=checkpoint_dir,
-            max_pages=args.max_pages,
-            extraction_dir=args.extraction_dir,
-            vector_db_path=args.vector_db_path
-        )
-
-        # Determine resume flag
-        resume = not args.no_resume if hasattr(args, "no_resume") else True
-
-        # Process documents using run_pipeline
-        results = pipeline.run_pipeline(
-            data_dir=args.data_dir,
-            num_files=args.num_files,
-            max_pages=args.max_pages,
-            force_reprocess=args.force_reprocess,
-            test_mode=False,
-            resume=resume
-        )
-
-        # Display results
-        elapsed_time = time.time() - start_time
-
-        print("\n" + "=" * 50)
-        print("🎉 PIPELINE COMPLETED")
-        print("=" * 50)
-        print(f"⏱️  Total time: {elapsed_time:.1f} seconds")
-        print(f"📄 Documents processed: {results['documents_processed']}")
-        print(f"✅ Successfully processed: {results['successful_extractions']}")
-        print(f"❌ Failed extractions: {results['failed_extractions']}")
-        print(f"🔗 Documents indexed: {results['successful_embeddings']}")
-        print(f"❌ Failed indexing: {results['failed_embeddings']}")
-
-        if results["successful_embeddings"] > 0:
-            print("\n🔍 Ready for semantic search!")
-            print('   Run: rkb search "your query here"')
-
-        if project_id:
-            print(f"📁 Project ID: {project_id}")
-
-        return 0
-
-    except KeyboardInterrupt:
-        print("\n⏹️  Pipeline interrupted by user")
-        return 130
-    except Exception as e:
-        print(f"\n✗ Pipeline failed: {e}")
-        if args.verbose:
-            import traceback
-            traceback.print_exc()
-        return 1
+    print("This command is deprecated. Use 'rkb translate' + 'rkb index' instead.")
+    return 1

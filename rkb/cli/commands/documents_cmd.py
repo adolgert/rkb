@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from rkb.core.document_registry import DocumentRegistry
+from rkb.services.bm25_index import BM25Index
 from rkb.services.search_service import SearchService
 
 
@@ -20,15 +21,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--db-path",
         type=Path,
-        default="rkb_documents.db",
-        help="Path to document registry database (default: rkb_documents.db)"
+        default=None,
+        help="Path to document registry database (default: <library>/sha256/rkb_documents.db)"
     )
 
     parser.add_argument(
         "--vector-db-path",
         type=Path,
-        default="rkb_chroma_db",
-        help="Path to vector database (default: rkb_chroma_db)"
+        default=None,
+        help="Path to vector database (default: <library>/sha256/rkb_chroma_db)"
     )
 
     parser.add_argument(
@@ -39,9 +40,16 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument(
         "--embedder",
-        choices=["chroma", "ollama"],
-        default="chroma",
-        help="Embedder to use (default: chroma)"
+        choices=["chroma", "ollama", "specter2"],
+        default="specter2",
+        help="Embedder to use (default: specter2)"
+    )
+
+    parser.add_argument(
+        "--mode",
+        choices=["hybrid", "semantic", "bm25"],
+        default="hybrid",
+        help="Search mode: hybrid (BM25 + semantic), semantic, or bm25 (default: hybrid)"
     )
 
     parser.add_argument(
@@ -96,6 +104,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 def execute(args: argparse.Namespace) -> int:
     """Execute the documents search command."""
+    from rkb.collection.config import CollectionConfig
+    config = CollectionConfig.load(getattr(args, "config", None))
+    sha256_dir = config.library_root / "sha256"
+    if args.vector_db_path is None:
+        args.vector_db_path = sha256_dir / "rkb_chroma_db"
+    if args.db_path is None:
+        args.db_path = sha256_dir / "rkb_documents.db"
+
     # Check if database exists
     if not args.vector_db_path.exists():
         print("✗ Vector database not found. Run 'rkb pipeline' or 'rkb index' first.")
@@ -104,11 +120,14 @@ def execute(args: argparse.Namespace) -> int:
     try:
         # Initialize services
         registry = DocumentRegistry(args.db_path)
+        bm25 = BM25Index(args.vector_db_path)
+        bm25.load()
         search_service = SearchService(
             db_path=args.vector_db_path,
             collection_name=args.collection_name,
             embedder_name=args.embedder,
-            registry=registry
+            registry=registry,
+            bm25_index=bm25,
         )
 
         # Handle stats request
@@ -163,6 +182,7 @@ def _perform_search(search_service: SearchService, query: str, args: argparse.Na
         min_threshold=args.threshold,
         filter_equations=filter_equations,
         project_id=args.project_id,
+        mode=getattr(args, "mode", "hybrid"),
     )
 
     # Display results
@@ -243,7 +263,7 @@ def _display_results(
                 pages = display_data.get("page_numbers", [])
                 page_str = f"#page={pages[0]}" if pages else ""
                 # URL-encode the path, preserving forward slashes
-                encoded_path = quote(doc_path, safe='/')
+                encoded_path = quote(doc_path, safe="/")
                 file_link = f"file://{encoded_path}{page_str}"
                 print(f"🔗 Link: {file_link}")
 

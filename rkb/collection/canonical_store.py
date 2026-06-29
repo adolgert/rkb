@@ -94,3 +94,22 @@ def store_pdf(
         )
 
     return destination_path
+
+
+def rename_pdf(library_root: Path, content_sha256: str, new_display_name: str) -> Path:
+    """Rename the PDF inside its canonical hash directory. Returns new path."""
+    hash_dir = canonical_dir(library_root, content_sha256)
+    existing = _existing_pdf(hash_dir)
+    if existing is None:
+        raise FileNotFoundError(f"No PDF found in canonical directory: {hash_dir}")
+
+    safe_name = (
+        new_display_name if new_display_name.lower().endswith(".pdf")
+        else f"{new_display_name}.pdf"
+    )
+    new_path = hash_dir / safe_name
+
+    if existing == new_path:
+        return existing
+
+    return existing.rename(new_path)
