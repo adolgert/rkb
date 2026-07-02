@@ -1,3 +1,5 @@
+> **Historical document.** This describes the retired project/experiment system, which is no longer wired into the CLI. For the current workflow, see the top-level [README.md](../README.md).
+
 # Projects
 
 ## What is a project?

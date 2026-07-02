@@ -1,3 +1,5 @@
+> **Historical document.** This describes the retired project/experiment system, which is no longer wired into the CLI. For the current workflow, see the top-level [README.md](../README.md).
+
 # RKB CLI Quick Tutorial
 
 This tutorial shows how to use the RKB command-line interface for PDF processing and semantic search with automatic duplicate detection and content-based deduplication.
