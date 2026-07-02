@@ -20,6 +20,7 @@ from rkb.cli.commands import (
     topics_cmd,
     translate_cmd,
     triage_cmd,
+    zotero_push_cmd,
 )
 
 
@@ -180,6 +181,19 @@ Examples:
     )
     topics_cmd.add_arguments(topics_parser)
 
+    # Zotero-push command
+    zotero_push_parser = subparsers.add_parser(
+        "zotero-push",
+        parents=[shared],
+        help="Push resolved catalog items to Zotero as bibliographic items",
+        description=(
+            "Build bibliographic items from resolved catalog metadata and push them to "
+            "Zotero with the canonical PDF as a child attachment. Untitled documents are "
+            "skipped; run `rkb enrich` to resolve their metadata first."
+        ),
+    )
+    zotero_push_cmd.add_arguments(zotero_push_parser)
+
     return parser
 
 
@@ -229,6 +243,8 @@ def main(args: list[str] | None = None) -> int:  # noqa: PLR0912
             return remove_cmd.execute(parsed_args)
         if parsed_args.command == "topics":
             return topics_cmd.execute(parsed_args)
+        if parsed_args.command == "zotero-push":
+            return zotero_push_cmd.execute(parsed_args)
         print(f"Unknown command: {parsed_args.command}")
         return 1
 

@@ -240,6 +240,34 @@ class Catalog:
         ).fetchall()
         return [row["content_sha256"] for row in rows]
 
+    def get_zotero_push_candidates(self) -> list[dict]:
+        """Return unlinked canonical files, newest first, for the zotero-push flow.
+
+        A candidate is any canonical file whose ``zotero_links`` row is missing
+        or whose status is ``failed``/``pending`` (so failed pushes are retried
+        on a later run). The resolved title is joined in so callers can skip
+        documents that lack usable bibliographic metadata. Ordered newest-first
+        by ``ingested_at``.
+        """
+        rows = self._connect().execute(
+            """
+                SELECT
+                    c.content_sha256,
+                    c.display_name,
+                    c.ingested_at,
+                    m.title
+                FROM canonical_files AS c
+                LEFT JOIN zotero_links AS z
+                    ON z.content_sha256 = c.content_sha256
+                LEFT JOIN metadata_resolved AS m
+                    ON m.content_sha256 = c.content_sha256
+                WHERE z.content_sha256 IS NULL
+                   OR z.status IN ('failed', 'pending')
+                ORDER BY c.ingested_at DESC, c.rowid DESC
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def get_zotero_link(self, content_sha256: str) -> dict | None:
         """Return one zotero_links row by content hash, if present."""
         row = self._connect().execute(

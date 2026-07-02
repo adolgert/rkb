@@ -15,6 +15,7 @@ from . import (
     topics_cmd,
     translate_cmd,
     triage_cmd,
+    zotero_push_cmd,
 )
 
 __all__ = [
@@ -31,4 +32,5 @@ __all__ = [
     "topics_cmd",
     "translate_cmd",
     "triage_cmd",
+    "zotero_push_cmd",
 ]
