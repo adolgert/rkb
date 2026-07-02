@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 import rkb.collection.canonical_store as canonical_store_module
-from rkb.collection.canonical_store import canonical_dir, is_stored, store_pdf
+from rkb.collection.canonical_store import canonical_dir, find_extraction, is_stored, store_pdf
 from rkb.collection.hashing import hash_file_sha256
 
 
@@ -71,3 +71,25 @@ def test_store_pdf_can_skip_source_verification_for_trusted_hash(monkeypatch, tm
 
     assert stored.exists()
     assert source_path not in calls
+
+
+def test_find_extraction_prefers_marker_over_nougat(tmp_path):
+    library_root = tmp_path / "library"
+    content_hash = "cd" * 32
+    hash_dir = canonical_dir(library_root, content_hash)
+
+    nougat_dir = hash_dir / "extractions" / "nougat-ocr-0.1"
+    nougat_dir.mkdir(parents=True)
+    (nougat_dir / "extracted.mmd").write_text("nougat")
+
+    assert find_extraction(library_root, content_hash) == nougat_dir / "extracted.mmd"
+
+    marker_dir = hash_dir / "extractions" / "marker-pdf-1.10.2"
+    marker_dir.mkdir(parents=True)
+    (marker_dir / "extracted.md").write_text("marker")
+
+    assert find_extraction(library_root, content_hash) == marker_dir / "extracted.md"
+
+
+def test_find_extraction_returns_none_when_absent(tmp_path):
+    assert find_extraction(tmp_path / "library", "ef" * 32) is None

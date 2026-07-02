@@ -29,6 +29,10 @@ Returns a list of **SearchHit** objects, sorted by relevance (highest first):
 | `chunk_cnt` | int \| null | Number of indexed Markdown chunks |
 | `page_cnt` | int \| null | Number of PDF pages; null if unavailable |
 | `abstract` | string | Abstract text; empty string if not extracted |
+| `best_chunk` | string | Text of the chunk that best matched the query — judge relevance from this before reading the document |
+| `section` | string \| null | Section heading of `best_chunk`, when known |
+| `markdown_path` | string \| null | Path to the full Markdown extraction. Clients with filesystem access should read this file directly instead of paging through `read_document`. Null if the document has not been translated |
+| `pdf_link` | string \| null | `file://` URL of the source PDF, anchored (`#page=N`) to the approximate page of `best_chunk` when derivable |
 
 Search modes:
 
@@ -57,6 +61,7 @@ Returns a list of **Chunk** objects in index order:
 | `chunk_cnt` | integer | Total number of chunks in the document |
 | `content` | string | Markdown text of the chunk |
 | `similarity` | null | Always null for sequential reads |
+| `pdf_link` | string \| null | `file://` URL of the source PDF, anchored (`#page=N`) to the approximate page the chunk starts on when derivable — use it to cite quotes |
 
 Use `chunk_cnt` from a prior `search_knowledge_base` or `get_document` call to know the valid index range (0 to `chunk_cnt - 1`). Fetch chunks in pages; a reasonable page size is 5–10 chunks.
 
@@ -99,6 +104,10 @@ Returns a **DocumentInfo** object:
 | `page_cnt` | int \| null | Number of PDF pages |
 | `chunk_cnt` | integer | Number of indexed Markdown chunks |
 | `dir_path` | string | Absolute path to the document's directory |
+| `markdown_path` | string \| null | Path to the full Markdown extraction; null if not translated |
+| `pdf_link` | string \| null | `file://` URL of the source PDF |
+
+Page anchors in `pdf_link` are recovered from artifacts marker-pdf leaves in the Markdown (image filenames and span anchors), so they are approximate and absent for passages without such artifacts.
 
 ---
 
