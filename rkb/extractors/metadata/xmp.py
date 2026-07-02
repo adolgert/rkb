@@ -75,7 +75,7 @@ class XMPExtractor(MetadataExtractor):
         author_elems = root.findall(".//dc:creator//rdf:li", ns)
         if author_elems:
             author_list = [e.text.strip() for e in author_elems if e.text and e.text.strip()]
-            authors = author_list if author_list else None
+            authors = author_list or None
 
         # Identifiers: dc:identifier (may contain DOI or arXiv URL)
         for id_elem in root.findall(".//dc:identifier", ns):

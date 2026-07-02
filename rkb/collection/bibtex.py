@@ -45,7 +45,7 @@ def _first_last_name(authors: list[str] | None) -> str:
         return "unknown"
     last = first.split(",")[0].strip() if "," in first else first.split()[-1]
     result = _strip_accents(last)
-    return result if result else "unknown"
+    return result or "unknown"
 
 
 def _first_title_word(title: str | None) -> str:

@@ -6,7 +6,6 @@ import pytest
 
 from rkb.services.bm25_index import BM25Index, _tokenise
 
-
 # ---------------------------------------------------------------------------
 # Tokenisation
 # ---------------------------------------------------------------------------
@@ -37,7 +36,7 @@ def test_tokenise_preserves_latex_tokens() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def tiny_index(tmp_path):  # noqa: ANN001
     """Return a BM25Index with three short chunks."""
     idx = BM25Index(tmp_path / "bm25_dir")

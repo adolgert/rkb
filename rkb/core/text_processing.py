@@ -135,7 +135,8 @@ def _merge_small_chunks(
     pending_text = ""
     pending_hierarchy: list[str] = []
 
-    for text, hierarchy in chunks:
+    for chunk_text, hierarchy in chunks:
+        text = chunk_text
         if pending_text:
             # Prepend the pending small chunk to this one
             text = pending_text + "\n\n" + text

@@ -214,7 +214,9 @@ class NougatExtractor(ExtractorInterface):
             temp_path = Path(temp_dir)
 
             # Determine actual pages to process (min of actual pages and max_pages)
-            pages_to_process = min(actual_page_count, self.max_pages) if actual_page_count else self.max_pages
+            pages_to_process = (
+                min(actual_page_count, self.max_pages) if actual_page_count else self.max_pages
+            )
 
             # Process in small chunks
             for start_page in range(1, pages_to_process + 1, self.chunk_size):
@@ -233,7 +235,8 @@ class NougatExtractor(ExtractorInterface):
                         logger = logging.getLogger(__name__)
                         content_len = len(chunk_content) if chunk_content else 0
                         logger.warning(
-                            f"    Chunk {start_page}-{end_page}: Empty or insufficient content (length: {content_len})"
+                            f"    Chunk {start_page}-{end_page}: "
+                            f"Empty or insufficient content (length: {content_len})"
                         )
                         if chunk_content:
                             logger.debug(f"    Content: {chunk_content!r}")
@@ -243,7 +246,9 @@ class NougatExtractor(ExtractorInterface):
 
                 except subprocess.TimeoutExpired:
                     import logging
-                    logging.getLogger(__name__).warning(f"    Chunk {start_page}-{end_page}: Timeout")
+                    logging.getLogger(__name__).warning(
+                        f"    Chunk {start_page}-{end_page}: Timeout"
+                    )
                     failed_chunks.append((start_page, end_page, "Timeout"))
                 except Exception as e:
                     import logging

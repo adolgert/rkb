@@ -10,7 +10,6 @@ import pytest
 from rkb.api import KnowledgeBase, SearchHit
 from rkb.core.models import ChunkResult, DocumentScore, SearchResult
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -50,7 +49,7 @@ def _patch_kb(tmp_path: Path) -> KnowledgeBase:
 
 
 # ---------------------------------------------------------------------------
-# search()
+# search tests
 # ---------------------------------------------------------------------------
 
 
@@ -119,7 +118,7 @@ def test_search_mode_routes_to_search_documents_ranked(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# get_chunks()
+# get_chunks tests
 # ---------------------------------------------------------------------------
 
 
@@ -142,7 +141,7 @@ def test_get_chunks_delegates_to_search_by_document(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# index_status()
+# index_status tests
 # ---------------------------------------------------------------------------
 
 

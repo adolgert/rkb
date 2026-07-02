@@ -35,7 +35,7 @@ class DocumentMetadata:
     def format_line2(self) -> str:
         """Format second line: year, document_type, journal, page_count."""
         year = str(self.year) if self.year else "unknown"
-        doc_type = self.doc_type if self.doc_type else "unknown"
-        journal = self.journal if self.journal else "unknown"
+        doc_type = self.doc_type or "unknown"
+        journal = self.journal or "unknown"
         page_count = str(self.page_count) if self.page_count else "unknown"
         return f"{year}, {doc_type}, {journal}, {page_count}"

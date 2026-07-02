@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
-import pytest
+from rkb.core.models import ChunkResult
 
-from rkb.core.models import ChunkResult, DocumentScore
+if TYPE_CHECKING:
+    from rkb.services.search_service import SearchService
 
 
 def _make_chunk(chunk_id: str, doc_id: str, similarity: float = 0.5) -> ChunkResult:
@@ -20,7 +21,7 @@ def _make_chunk(chunk_id: str, doc_id: str, similarity: float = 0.5) -> ChunkRes
     )
 
 
-def _make_search_service(bm25_index: Any = None) -> Any:
+def _make_search_service(bm25_index: object = None) -> SearchService:
     """Build a SearchService with mocked Chroma and optional BM25 index."""
     from rkb.services.search_service import SearchService
 
@@ -30,11 +31,10 @@ def _make_search_service(bm25_index: Any = None) -> Any:
         mock_emb.embed_query.return_value = None  # use query_texts path
         mock_get_emb.return_value = mock_emb
 
-        svc = SearchService(
+        return SearchService(
             db_path="/tmp/fake_chroma",
             bm25_index=bm25_index,
         )
-    return svc
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +96,17 @@ def test_mode_semantic_uses_only_chroma() -> None:
     svc.bm25_index = mock_bm25
 
     # Patch fetch_chunks_iteratively (used by semantic path)
-    svc.fetch_chunks_iteratively = MagicMock(return_value=([], {"chunks_fetched": 0, "chunks_above_threshold": 0, "iterations": 1, "documents_found": 0}))
+    svc.fetch_chunks_iteratively = MagicMock(
+        return_value=(
+            [],
+            {
+                "chunks_fetched": 0,
+                "chunks_above_threshold": 0,
+                "iterations": 1,
+                "documents_found": 0,
+            },
+        )
+    )
 
     svc.search_documents_ranked("query", mode="semantic")
 

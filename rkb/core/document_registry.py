@@ -591,7 +591,9 @@ class DocumentRegistry:
                     doc_id=row["doc_id"],
                     extractor_name=row["extractor_name"],
                     extractor_version=row["extractor_version"],
-                    extraction_path=Path(row["extraction_path"]) if row["extraction_path"] else None,
+                    extraction_path=(
+                        Path(row["extraction_path"]) if row["extraction_path"] else None
+                    ),
                     content=row["content"],
                     page_count=row["page_count"],
                     status=ExtractionStatus(row["status"]),
@@ -649,7 +651,7 @@ class DocumentRegistry:
                 f" WHERE doc_id IN ({placeholders}) AND chunk_count IS NOT NULL",
                 doc_ids,
             ).fetchall()
-        return {doc_id: count for doc_id, count in rows}
+        return dict(rows)
 
     def set_chunk_count(self, doc_id: str, chunk_count: int) -> None:
         """Update chunk_count for a document."""

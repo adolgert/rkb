@@ -9,8 +9,10 @@ from pathlib import Path
 from rkb.cli.commands import (
     documents_cmd,
     enrich_cmd,
+    import_cmd,
     index_cmd,
     ingest_cmd,
+    recent_cmd,
     rectify_cmd,
     remove_cmd,
     search_cmd,
@@ -92,6 +94,28 @@ Examples:
         description="Scan one or more directories and ingest discovered PDFs",
     )
     ingest_cmd.add_arguments(ingest_parser)
+
+    # Import command (full pipeline)
+    import_parser = subparsers.add_parser(
+        "import",
+        parents=[shared],
+        help="Import new PDFs end to end: ingest, resolve metadata, translate, index",
+        description=(
+            "Run the full import pipeline for new PDFs: ingest into canonical storage, "
+            "resolve metadata and rename, translate to Markdown, and index for search. "
+            "Defaults to scanning ~/Dropbox/Mendeley."
+        ),
+    )
+    import_cmd.add_arguments(import_parser)
+
+    # Recent command
+    recent_parser = subparsers.add_parser(
+        "recent",
+        parents=[shared],
+        help="List recently imported documents, newest first",
+        description="List the most recently ingested PDFs with links to files and Markdown",
+    )
+    recent_cmd.add_arguments(recent_parser)
 
     # Enrich command
     enrich_parser = subparsers.add_parser(
@@ -187,6 +211,10 @@ def main(args: list[str] | None = None) -> int:  # noqa: PLR0912
             return index_cmd.execute(parsed_args)
         if parsed_args.command == "ingest":
             return ingest_cmd.execute(parsed_args)
+        if parsed_args.command == "import":
+            return import_cmd.execute(parsed_args)
+        if parsed_args.command == "recent":
+            return recent_cmd.execute(parsed_args)
         if parsed_args.command == "enrich":
             return enrich_cmd.execute(parsed_args)
         if parsed_args.command == "rectify":
