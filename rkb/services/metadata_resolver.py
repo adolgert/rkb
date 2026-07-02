@@ -12,6 +12,7 @@ from rkb.extractors.metadata.doi_crossref import DOICrossRefExtractor
 from rkb.extractors.metadata.grobid_extractor import GrobidExtractor
 from rkb.extractors.metadata.semantic_scholar import SemanticScholarExtractor
 from rkb.extractors.metadata.xmp import XMPExtractor
+from rkb.extractors.metadata.zotero_translation import ZoteroTranslationExtractor
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -23,13 +24,21 @@ logger = logging.getLogger(__name__)
 
 _TARGET_FIELDS = ("title", "authors", "year", "abstract")
 
-_PRIORITY_ORDER = ["grobid", "semantic_scholar", "doi_crossref", "arxiv", "xmp"]
+_PRIORITY_ORDER = [
+    "zotero_translation",
+    "grobid",
+    "semantic_scholar",
+    "doi_crossref",
+    "arxiv",
+    "xmp",
+]
 
 _CLAUDE_SYSTEM_PROMPT = """\
 You are a metadata merging assistant. Given multiple metadata extractions for the \
 same academic PDF, produce a single correct merged result.
 
-Source reliability ranking (highest first): GROBID > Semantic Scholar > CrossRef > arXiv > XMP.
+Source reliability ranking (highest first): Zotero translation-server > GROBID > \
+Semantic Scholar > CrossRef > arXiv > XMP.
 
 Rules:
 - Prefer the highest-reliability source for each field.
@@ -66,6 +75,7 @@ class MetadataResolver:
         anthropic_api_key: str | None = None,
         s2_api_key: str | None = None,
         grobid_url: str = "http://172.17.0.1:8070",
+        translation_server_url: str | None = None,
         use_claude_merge: bool = True,
     ) -> None:
         self._catalog = catalog
@@ -78,6 +88,7 @@ class MetadataResolver:
         self._crossref = DOICrossRefExtractor()
         self._arxiv = ArxivExtractor()
         self._s2 = SemanticScholarExtractor(api_key=s2_api_key)
+        self._translation = ZoteroTranslationExtractor(server_url=translation_server_url)
 
     def resolve(
         self, pdf_path: Path, content_sha256: str, *, force: bool = False
@@ -138,14 +149,16 @@ class MetadataResolver:
         arxiv_id: str | None = None
 
         doi, arxiv_id = self._extract_xmp(pdf_path, content_sha256, sources)
+        if arxiv_id is None:
+            arxiv_id = ArxivExtractor.id_from_filename(pdf_path.name)
+
+        self._extract_translation(pdf_path, content_sha256, sources, doi, arxiv_id)
         self._extract_grobid(pdf_path, content_sha256, sources)
         self._extract_crossref(pdf_path, content_sha256, sources, doi)
 
         if self._all_fields_filled(sources):
             return sources
 
-        if arxiv_id is None:
-            arxiv_id = ArxivExtractor.id_from_filename(pdf_path.name)
         self._extract_arxiv(content_sha256, sources, arxiv_id)
 
         if self._all_fields_filled(sources):
@@ -167,6 +180,28 @@ class MetadataResolver:
         except Exception:
             logger.debug("XMP extraction failed for %s", pdf_path)
             return None, None
+
+    def _extract_translation(
+        self,
+        pdf_path: Path,
+        content_sha256: str,
+        sources: dict[str, DocumentMetadata],
+        doi: str | None,
+        arxiv_id: str | None,
+    ) -> None:
+        """Run Zotero translation-server extractor via known IDs or PDF text."""
+        try:
+            if doi:
+                meta = self._translation.extract_by_identifier(doi)
+            elif arxiv_id:
+                meta = self._translation.extract_by_identifier(f"arXiv:{arxiv_id}")
+            else:
+                meta = self._translation.extract(pdf_path)
+            if meta.title:
+                sources["zotero_translation"] = meta
+                self._store_source(content_sha256, meta)
+        except Exception:
+            logger.debug("Zotero translation-server extraction failed for %s", pdf_path)
 
     def _extract_grobid(
         self, pdf_path: Path, content_sha256: str, sources: dict[str, DocumentMetadata]

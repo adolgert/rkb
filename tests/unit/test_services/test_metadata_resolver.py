@@ -55,6 +55,7 @@ class TestCacheHit:
 
         with (
             patch.object(resolver._xmp, "extract_with_ids") as mock_xmp,
+            patch.object(resolver._translation, "extract") as mock_translation,
             patch.object(resolver._grobid, "extract") as mock_grobid,
             patch.object(resolver._crossref, "extract") as mock_cr,
             patch.object(resolver._arxiv, "extract_by_id") as mock_arxiv,
@@ -64,6 +65,7 @@ class TestCacheHit:
             mock_xmp.return_value = XMPResult(
                 metadata=_meta("xmp", title="Fresh"),
             )
+            mock_translation.return_value = _meta("zotero_translation")
             mock_grobid.return_value = _meta("grobid")
             mock_cr.return_value = _meta("doi_crossref")
             mock_arxiv.return_value = _meta("arxiv")
@@ -178,6 +180,7 @@ class TestGrobidUnavailable:
 
         with (
             patch.object(resolver._xmp, "extract_with_ids") as mock_xmp,
+            patch.object(resolver._translation, "extract") as mock_translation,
             patch.object(resolver._grobid, "extract") as mock_grobid,
             patch.object(resolver._crossref, "extract") as mock_cr,
             patch.object(resolver._s2, "extract_by_title") as mock_s2,
@@ -185,6 +188,7 @@ class TestGrobidUnavailable:
             mock_xmp.return_value = XMPResult(
                 metadata=_meta("xmp", title="XMP Only"),
             )
+            mock_translation.return_value = _meta("zotero_translation")
             mock_grobid.side_effect = Exception("GROBID down")
             mock_cr.return_value = _meta("doi_crossref")
             mock_s2.return_value = _meta(
@@ -198,6 +202,65 @@ class TestGrobidUnavailable:
             result = resolver.resolve(Path("/tmp/test.pdf"), "a" * 64)
             assert result.title in ("XMP Only", "S2 Title")
             assert result.resolution_method == "rule_based"
+
+
+class TestZoteroTranslation:
+    def test_doi_from_xmp_reaches_translation_server(self, catalog):
+        resolver = MetadataResolver(catalog, use_claude_merge=False)
+
+        with (
+            patch.object(resolver._xmp, "extract_with_ids") as mock_xmp,
+            patch.object(resolver._translation, "extract_by_identifier") as mock_translation,
+            patch.object(resolver._grobid, "extract") as mock_grobid,
+            patch.object(resolver._crossref, "query_crossref") as mock_cr,
+        ):
+            mock_xmp.return_value = XMPResult(
+                metadata=_meta("xmp", title="XMP Title"),
+                doi="10.1000/xyz",
+            )
+            mock_translation.return_value = _meta(
+                "zotero_translation",
+                title="Authoritative Title",
+                authors=["A. Author"],
+                year=2024,
+                abstract="From registrar.",
+            )
+            mock_grobid.return_value = _meta("grobid", title="Grobid Title")
+            mock_cr.return_value = _meta("doi_crossref")
+
+            result = resolver.resolve(Path("/tmp/test.pdf"), "a" * 64)
+
+        mock_translation.assert_called_once_with("10.1000/xyz")
+        # zotero_translation outranks grobid and xmp in the merge.
+        assert result.title == "Authoritative Title"
+        assert "zotero_translation" in result.source_extractors
+
+    def test_full_translation_result_short_circuits_fallbacks(self, catalog):
+        resolver = MetadataResolver(catalog, use_claude_merge=False)
+
+        with (
+            patch.object(resolver._xmp, "extract_with_ids") as mock_xmp,
+            patch.object(resolver._translation, "extract_by_identifier") as mock_translation,
+            patch.object(resolver._grobid, "extract") as mock_grobid,
+            patch.object(resolver._crossref, "query_crossref") as mock_cr,
+            patch.object(resolver._arxiv, "extract_by_id") as mock_arxiv,
+            patch.object(resolver._s2, "extract_by_doi") as mock_s2,
+        ):
+            mock_xmp.return_value = XMPResult(metadata=_meta("xmp"), doi="10.1000/xyz")
+            mock_translation.return_value = _meta(
+                "zotero_translation",
+                title="T",
+                authors=["A"],
+                year=2024,
+                abstract="Abs",
+            )
+            mock_grobid.return_value = _meta("grobid")
+            mock_cr.return_value = _meta("doi_crossref")
+
+            resolver.resolve(Path("/tmp/test.pdf"), "a" * 64)
+
+        mock_arxiv.assert_not_called()
+        mock_s2.assert_not_called()
 
 
 class TestResolveBatch:

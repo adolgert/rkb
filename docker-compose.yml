@@ -1,0 +1,17 @@
+services:
+  grobid:
+    image: lfoppiano/grobid:0.8.0
+    ports:
+      - "8070:8070"
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:-UseContainerSupport"
+    restart: unless-stopped
+  translation-server:
+    # Built locally from https://github.com/zotero/translation-server because
+    # Docker Hub images are unusable on x86_64: `latest` is arm64-only and the
+    # newest amd64 tag (2.0.4) is too old for current translators.
+    # Rebuild: git clone --recurse-submodules <repo> && docker build -t kbase/translation-server:local .
+    image: kbase/translation-server:local
+    ports:
+      - "1969:1969"
+    restart: unless-stopped
