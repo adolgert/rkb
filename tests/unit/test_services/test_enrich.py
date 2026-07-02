@@ -161,11 +161,35 @@ class TestEnrichCollection:
         assert len(summary.failures) == 1
         assert "network error" in summary.failures[0].error
 
+    def test_nothing_found_counted_separately(self, tmp_path):
+        config = _setup_catalog_and_pdf(tmp_path, _HASH)
+
+        resolver = MagicMock()
+        resolver.resolve.return_value = MagicMock(
+            cached=False,
+            found=False,
+            title=None,
+            authors=None,
+            year=None,
+        )
+
+        summary = enrich_collection(config, resolver, hashes=[_HASH])
+
+        assert summary.resolved == 0
+        assert summary.nothing_found == 1
+        assert summary.renamed == 0
+        assert summary.failed == 0
+        # nothing_found is an expected outcome, not a failure.
+        assert summary.exit_code() == 0
+
     def test_to_dict(self):
-        summary = EnrichSummary(total=5, resolved=3, renamed=2, already_resolved=1, failed=1)
+        summary = EnrichSummary(
+            total=5, resolved=3, nothing_found=1, renamed=2, already_resolved=1, failed=1
+        )
         d = summary.to_dict()
         assert d["total"] == 5
         assert d["resolved"] == 3
+        assert d["nothing_found"] == 1
 
     def test_exit_code(self):
         assert EnrichSummary(failed=0).exit_code() == 0

@@ -35,6 +35,7 @@ class EnrichSummary:
 
     total: int = 0
     resolved: int = 0
+    nothing_found: int = 0
     renamed: int = 0
     already_resolved: int = 0
     failed: int = 0
@@ -45,6 +46,7 @@ class EnrichSummary:
         return {
             "total": self.total,
             "resolved": self.resolved,
+            "nothing_found": self.nothing_found,
             "renamed": self.renamed,
             "already_resolved": self.already_resolved,
             "failed": self.failed,
@@ -153,7 +155,13 @@ def _enrich_one(
         summary.already_resolved += 1
         return
 
-    summary.resolved += 1
+    if result.found:
+        summary.resolved += 1
+    else:
+        # Resolution ran to completion but no extractor found any metadata;
+        # this is an expected outcome (e.g. an unidentifiable scan), not a
+        # failure, so it does not affect the exit code.
+        summary.nothing_found += 1
 
     if result.title:
         hash_dir = canonical_dir(config.library_root, content_sha256)

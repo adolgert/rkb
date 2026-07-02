@@ -54,6 +54,7 @@ def _build_resolver(config: CollectionConfig):
 def _print_human_summary(summary_dict: dict) -> None:
     print(f"Total:            {summary_dict['total']}")
     print(f"  Resolved:       {summary_dict['resolved']}")
+    print(f"  Nothing found:  {summary_dict['nothing_found']}")
     print(f"  Renamed:        {summary_dict['renamed']}")
     print(f"  Already done:   {summary_dict['already_resolved']}")
     print(f"  Failed:         {summary_dict['failed']}")

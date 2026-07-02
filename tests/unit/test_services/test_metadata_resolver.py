@@ -1,6 +1,7 @@
 """Tests for MetadataResolver service."""
 
 import sys
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -9,7 +10,7 @@ import pytest
 from rkb.collection.catalog import Catalog
 from rkb.extractors.metadata.models import DocumentMetadata
 from rkb.extractors.metadata.xmp import XMPResult
-from rkb.services.metadata_resolver import MetadataResolver
+from rkb.services.metadata_resolver import MetadataResolver, ResolutionResult
 
 
 @pytest.fixture
@@ -338,6 +339,12 @@ class TestTitleSearchFallback:
                 "_markdown_text",
                 return_value="# Markov Chain Monte Carlo Methods\n\nNo author here.",
             ),
+            # Mock the last-resort LLM stage so tests never hit a live API.
+            patch.object(
+                resolver._gemini_flash,
+                "extract_from_text",
+                return_value=_meta("gemini_flash"),
+            ),
         ):
             mock_xmp.return_value = XMPResult(metadata=_meta("xmp"))
             mock_translation.return_value = _meta("zotero_translation")
@@ -396,6 +403,122 @@ class TestTitleSearchFallback:
 
         mock_cr_title.assert_not_called()
         assert result.title is None
+
+
+class TestGeminiFlashFallback:
+    def _patch_registrars(self, stack, resolver):
+        """Patch every registrar so only the fallback stages can produce a title."""
+        stack.enter_context(patch.object(
+            resolver._xmp, "extract_with_ids",
+            return_value=XMPResult(metadata=_meta("xmp"))))
+        stack.enter_context(patch.object(
+            resolver._translation, "extract", return_value=_meta("zotero_translation")))
+        stack.enter_context(patch.object(
+            resolver._grobid, "extract", return_value=_meta("grobid")))
+        stack.enter_context(patch.object(
+            resolver._crossref, "extract", return_value=_meta("doi_crossref")))
+        stack.enter_context(patch.object(
+            resolver._s2, "extract_by_title", return_value=_meta("semantic_scholar")))
+
+    def test_gemini_fires_only_when_title_search_found_nothing(self, catalog):
+        resolver = MetadataResolver(catalog, use_claude_merge=False)
+        markdown = "# Not A Title\n\nGloria Author\n\nBody text."
+
+        with ExitStack() as stack:
+            self._patch_registrars(stack, resolver)
+            stack.enter_context(patch.object(
+                resolver._crossref, "search_by_title", return_value=_meta("crossref_title")))
+            stack.enter_context(patch.object(resolver, "_markdown_text", return_value=markdown))
+            mock_gemini = stack.enter_context(
+                patch.object(resolver._gemini_flash, "extract_from_text"))
+            mock_gemini.return_value = _meta(
+                "gemini_flash", title="Gloria's Real Paper", authors=["Gloria Author"], year=1985
+            )
+            result = resolver.resolve(Path("/tmp/test.pdf"), "a" * 64)
+
+        mock_gemini.assert_called_once_with(markdown)
+        assert result.title == "Gloria's Real Paper"
+        assert "gemini_flash" in result.source_extractors
+
+    def test_gemini_skipped_when_a_source_has_title(self, catalog):
+        resolver = MetadataResolver(catalog, use_claude_merge=False)
+
+        with (
+            patch.object(resolver._xmp, "extract_with_ids",
+                         return_value=XMPResult(metadata=_meta("xmp"))),
+            patch.object(resolver._translation, "extract",
+                         return_value=_meta("zotero_translation")),
+            patch.object(resolver._grobid, "extract",
+                         return_value=_meta("grobid", title="GROBID Title")),
+            patch.object(resolver._crossref, "extract", return_value=_meta("doi_crossref")),
+            patch.object(resolver._s2, "extract_by_title",
+                         return_value=_meta("semantic_scholar")),
+            patch.object(resolver._gemini_flash, "extract_from_text") as mock_gemini,
+        ):
+            result = resolver.resolve(Path("/tmp/test.pdf"), "a" * 64)
+
+        mock_gemini.assert_not_called()
+        assert result.title == "GROBID Title"
+
+    def test_gemini_skipped_when_no_markdown(self, catalog):
+        resolver = MetadataResolver(catalog, use_claude_merge=False)
+
+        with ExitStack() as stack:
+            self._patch_registrars(stack, resolver)
+            stack.enter_context(patch.object(resolver, "_markdown_text", return_value=None))
+            mock_gemini = stack.enter_context(
+                patch.object(resolver._gemini_flash, "extract_from_text"))
+            resolver.resolve(Path("/tmp/test.pdf"), "a" * 64)
+
+        mock_gemini.assert_not_called()
+
+    def test_gemini_title_feeds_title_search_and_upgrades(self, catalog):
+        resolver = MetadataResolver(catalog, use_claude_merge=False)
+        # Heading is generic, so the heading-based search yields nothing;
+        # Gemini transcribes the real title, which corroborates via CrossRef.
+        markdown = "# Introduction\n\nHilbert Author\n\nBody about spaces."
+
+        with ExitStack() as stack:
+            self._patch_registrars(stack, resolver)
+            mock_cr_title = stack.enter_context(
+                patch.object(resolver._crossref, "search_by_title"))
+            # _patch_registrars stubs S2 extract_by_title to return a
+            # title-less result, so only the crossref registrar match upgrades.
+            stack.enter_context(patch.object(resolver, "_markdown_text", return_value=markdown))
+            mock_gemini = stack.enter_context(
+                patch.object(resolver._gemini_flash, "extract_from_text"))
+            mock_gemini.return_value = _meta(
+                "gemini_flash", title="On Hilbert Spaces", authors=["Hilbert Author"]
+            )
+            mock_cr_title.return_value = _meta(
+                "crossref_title",
+                title="On Hilbert Spaces",
+                authors=["Hilbert Author"],
+                year=1912,
+            )
+            result = resolver.resolve(Path("/tmp/test.pdf"), "a" * 64)
+
+        mock_cr_title.assert_called_once_with("On Hilbert Spaces")
+        assert "crossref_title" in result.source_extractors
+        assert result.year == 1912
+
+
+class TestFoundProperty:
+    def test_found_true_when_metadata_present(self):
+        result = ResolutionResult(content_sha256="a" * 64, title="A Title")
+        assert result.found is True
+
+    def test_found_true_from_authors_only(self):
+        result = ResolutionResult(content_sha256="a" * 64, authors=["A. Author"])
+        assert result.found is True
+
+    def test_found_false_when_empty(self):
+        result = ResolutionResult(content_sha256="a" * 64)
+        assert result.found is False
+
+    def test_found_true_for_cached_result(self):
+        result = ResolutionResult(content_sha256="a" * 64, year=1999, cached=True)
+        assert result.found is True
 
 
 class TestResolveBatch:

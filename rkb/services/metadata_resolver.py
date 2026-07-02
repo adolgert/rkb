@@ -11,6 +11,7 @@ from rkb.collection.canonical_store import find_extraction_in_dir
 from rkb.core.text_processing import title_candidate_from_marker_markdown, titles_match
 from rkb.extractors.metadata.arxiv_extractor import ArxivExtractor
 from rkb.extractors.metadata.doi_crossref import DOICrossRefExtractor
+from rkb.extractors.metadata.gemini_flash import GeminiFlashExtractor
 from rkb.extractors.metadata.grobid_extractor import GrobidExtractor
 from rkb.extractors.metadata.semantic_scholar import SemanticScholarExtractor
 from rkb.extractors.metadata.xmp import XMPExtractor
@@ -38,6 +39,7 @@ _PRIORITY_ORDER = [
     "xmp",
     "semantic_scholar_title",
     "crossref_title",
+    "gemini_flash",
 ]
 
 _CLAUDE_SYSTEM_PROMPT = """\
@@ -46,7 +48,9 @@ same academic PDF, produce a single correct merged result.
 
 Source reliability ranking (highest first): Zotero translation-server > GROBID > \
 Semantic Scholar > CrossRef > arXiv > XMP > title-based searches (Semantic Scholar \
-title / CrossRef title, least reliable because they are matched only by title text).
+title / CrossRef title, less reliable because they are matched only by title text) > \
+Gemini Flash (least reliable: transcribed from the document by an LLM with no external \
+corroboration).
 
 Rules:
 - Prefer the highest-reliability source for each field.
@@ -71,6 +75,26 @@ class ResolutionResult:
     resolution_method: str = "none"
     source_extractors: list[str] = field(default_factory=list)
     cached: bool = False
+
+    @property
+    def found(self) -> bool:
+        """Whether resolution produced any usable metadata.
+
+        This is the contract callers use to distinguish "resolution ran but
+        found nothing" from "resolution found something". It is based on the
+        metadata fields rather than ``source_extractors`` so that cached
+        results (which may not repopulate the source list) report correctly.
+        """
+        return any(
+            value
+            for value in (
+                self.title,
+                self.authors,
+                self.year,
+                self.journal,
+                self.abstract,
+            )
+        )
 
 
 class MetadataResolver:
@@ -97,6 +121,7 @@ class MetadataResolver:
         self._arxiv = ArxivExtractor()
         self._s2 = SemanticScholarExtractor(api_key=s2_api_key)
         self._translation = ZoteroTranslationExtractor(server_url=translation_server_url)
+        self._gemini_flash = GeminiFlashExtractor()
 
     def resolve(
         self, pdf_path: Path, content_sha256: str, *, force: bool = False
@@ -175,7 +200,15 @@ class MetadataResolver:
         self._extract_s2(content_sha256, sources, doi)
 
         if self._best_field(sources, "title") is None:
-            self._extract_title_search(pdf_path, content_sha256, sources)
+            markdown = self._markdown_text(pdf_path)
+            if markdown:
+                heading_candidate = self._extract_title_search(
+                    content_sha256, sources, markdown
+                )
+                if self._best_field(sources, "title") is None:
+                    self._extract_gemini_flash(
+                        content_sha256, sources, markdown, heading_candidate
+                    )
 
         return sources
 
@@ -285,26 +318,54 @@ class MetadataResolver:
             logger.debug("S2 extraction failed")
 
     def _extract_title_search(
-        self, pdf_path: Path, content_sha256: str, sources: dict[str, DocumentMetadata]
-    ) -> None:
+        self,
+        content_sha256: str,
+        sources: dict[str, DocumentMetadata],
+        markdown: str,
+    ) -> str | None:
         """Seed a bibliographic title search from the marker-pdf Markdown heading.
 
         Fires only when no identifier-based source produced a title (typically
-        pre-DOI scans). Degrades silently when the Markdown is not present yet
-        (e.g. enrich running before translate for a new file). A hit is accepted
-        only when its title strongly matches the heading AND one of its authors
-        appears in the title-page region of the Markdown — generic titles like
-        "Markov Chain Monte Carlo Methods" match many unrelated works.
+        pre-DOI scans). A hit is accepted only when its title strongly matches
+        the heading AND one of its authors appears in the title-page region of
+        the Markdown — generic titles like "Markov Chain Monte Carlo Methods"
+        match many unrelated works. Returns the heading candidate that was
+        searched (or None), so the caller can avoid re-running the search with
+        an identical candidate.
         """
-        markdown = self._markdown_text(pdf_path)
-        if not markdown:
-            return
         candidate = title_candidate_from_marker_markdown(markdown)
         if not candidate:
-            return
+            return None
         title_page = markdown[:_TITLE_PAGE_CHARS]
         self._title_search_crossref(content_sha256, sources, candidate, title_page)
         self._title_search_s2(content_sha256, sources, candidate, title_page)
+        return candidate
+
+    def _extract_gemini_flash(
+        self,
+        content_sha256: str,
+        sources: dict[str, DocumentMetadata],
+        markdown: str,
+        heading_candidate: str | None,
+    ) -> None:
+        """Transcribe metadata with Gemini Flash as the final fallback.
+
+        Runs only when every prior stage (including the heading title search)
+        failed to produce a title. Gemini's transcribed title is stored as its
+        own source and is also fed back into the registrar title searches so a
+        CrossRef/S2 match can upgrade the metadata; the second pass is skipped
+        when Gemini's title equals the heading candidate already searched.
+        """
+        meta = self._gemini_flash.extract_from_text(markdown)
+        if not meta.title:
+            return
+        sources["gemini_flash"] = meta
+        self._store_source(content_sha256, meta)
+
+        if meta.title != heading_candidate:
+            title_page = markdown[:_TITLE_PAGE_CHARS]
+            self._title_search_crossref(content_sha256, sources, meta.title, title_page)
+            self._title_search_s2(content_sha256, sources, meta.title, title_page)
 
     def _markdown_text(self, pdf_path: Path) -> str | None:
         """Return the marker-pdf Markdown beside the PDF, if present."""
