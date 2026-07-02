@@ -251,3 +251,5 @@ Icon?
 # Secrets — live API keys, never commit
 local.env
 Gemini key.txt
+zotkey.txt
+zotid.txt

@@ -88,9 +88,24 @@ def _print_summary(summary) -> None:  # noqa: ANN001 - ZoteroPushSummary
             print(f"  {failure.content_sha256[:12]} -- {failure.error}")
 
 
+def _ensure_zotero_credentials() -> None:
+    """Load Zotero credentials from local.env in the current directory if not set."""
+    import os
+    from pathlib import Path
+
+    if os.environ.get("ZOTERO_LIBRARY_ID") and os.environ.get("ZOTERO_API_KEY"):
+        return
+    env_path = Path.cwd() / "local.env"
+    if env_path.exists():
+        from rkb.cli.commands.import_cmd import _load_env_file
+
+        _load_env_file(env_path)
+
+
 def execute(args: argparse.Namespace) -> int:
     """Execute the zotero-push command."""
     try:
+        _ensure_zotero_credentials()
         config = CollectionConfig.load(config_path=getattr(args, "config", None))
         with Catalog(config.catalog_db) as catalog:
             catalog.initialize()

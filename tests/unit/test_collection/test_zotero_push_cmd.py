@@ -108,6 +108,9 @@ def test_execute_credential_error_exit_one(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("PDF_LIBRARY_ROOT", str(library_root))
     monkeypatch.delenv("ZOTERO_LIBRARY_ID", raising=False)
     monkeypatch.delenv("ZOTERO_API_KEY", raising=False)
+    # cwd must not contain a local.env, or execute() reloads real credentials
+    # and the push runs against the live Zotero library.
+    monkeypatch.chdir(tmp_path)
     _seed(library_root, tmp_path, "a" * 64)
 
     exit_code = zotero_push_cmd.execute(_make_args())
