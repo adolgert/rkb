@@ -47,6 +47,24 @@ rkb search --experiment baseline "lambda survival function"
 rkb experiment compare baseline comparison --query "hazard rate integral"
 ```
 
+```bash
+# Load API keys (Gemini for marker, etc.)
+set -a && source local.env && set +a
+
+# 1. Ingest the new PDFs + resolve metadata (rename to canonical names)
+uv run rkb ingest --resolve ~/Dropbox/Mendeley/imports/20260521 2>/dev/null
+
+# 2. Convert PDFs to Markdown via marker-pdf
+uv run rkb translate 2>/dev/null
+
+# 3. Chunk and add to the search index (specter2 embedder)
+uv run rkb index 2>/dev/null
+```
+Notes:
+- translate and index operate on the whole canonical collection (no path needed) — they pick up anything new since the last run.
+- 767 PDFs is a lot; translate is the slow step (marker + Gemini per PDF). Plan for hours, not minutes.
+- If you'd rather decouple metadata resolution from ingestion, you can drop --resolve and run uv run rkb enrich afterwards — same effect.
+
 ## Architecture
 
 The system follows a layered architecture with strict import controls:

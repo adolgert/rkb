@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from rkb.collection.config import CollectionConfig
 from rkb.services.translate import (
     DEFAULT_CHUNK_PAGES,
+    LLMUnavailableError,
     marker_pdf_version,
     tool_subdir,
     translate_collection,
@@ -95,14 +96,30 @@ def execute(args: argparse.Namespace) -> int:
                 _print_human_summary(summary_dict, dry_run=True, subdir=subdir)
             return 0
 
-        summary = translate_collection(
-            config,
-            gemini_api_key=gemini_api_key,
-            gemini_model=args.gemini_model,
-            dry_run=False,
-            all_pdfs=args.all,
-            chunk_pages=args.chunk_pages,
-        )
+        try:
+            summary = translate_collection(
+                config,
+                gemini_api_key=gemini_api_key,
+                gemini_model=args.gemini_model,
+                dry_run=False,
+                all_pdfs=args.all,
+                chunk_pages=args.chunk_pages,
+            )
+        except LLMUnavailableError as abort:
+            partial = abort.summary.to_dict()
+            if getattr(args, "json", False):
+                partial["aborted"] = True
+                partial["abort_reason"] = str(abort)
+                print(json.dumps(partial, indent=2))
+            else:
+                _print_human_summary(partial, dry_run=False, subdir=subdir)
+                print()
+                print(f"ABORTED: {abort}")
+                print(
+                    "No PDFs were marked as failed due to this outage; "
+                    "rerun after the LLM is back.",
+                )
+            return 1
 
         if getattr(args, "json", False):
             print(json.dumps(summary.to_dict(), indent=2))

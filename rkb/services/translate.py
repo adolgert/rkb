@@ -59,6 +59,20 @@ class TranslateSummary:
         return 2 if self.failed > 0 else 0
 
 
+class LLMUnavailableError(RuntimeError):
+    """Raised when the LLM service becomes unreachable mid-batch.
+
+    The PDF that triggered the error is intentionally NOT recorded in
+    ``summary.failures``: it should be retried on the next run, not
+    marked as untranslatable due to an LLM outage. ``summary`` holds the
+    counts of work completed before the abort.
+    """
+
+    def __init__(self, message: str, summary: TranslateSummary) -> None:
+        super().__init__(message)
+        self.summary = summary
+
+
 def _find_pdfs_to_translate(library_root: Path, *, all_pdfs: bool, subdir: str) -> list[Path]:
     """Return PDF paths sorted smallest-first that need translation.
 
@@ -114,19 +128,47 @@ def _offset_images(text: str, images: dict, start_page: int) -> tuple[str, dict]
     return text, renamed
 
 
+_STRICT_GEMINI_SERVICE = "rkb.services.strict_gemini.StrictGoogleGeminiService"
+
+
 def _build_config_dict(gemini_api_key: str, gemini_model: str, page_range: str | None) -> dict:
     from marker.config.parser import ConfigParser
     opts: dict = {
         "use_llm": True,
-        "llm_service": "marker.services.gemini.GoogleGeminiService",
-        "GoogleGeminiService_gemini_model_name": gemini_model,
-        "GoogleGeminiService_gemini_api_key": gemini_api_key,
+        "llm_service": _STRICT_GEMINI_SERVICE,
+        "StrictGoogleGeminiService_gemini_model_name": gemini_model,
+        "StrictGoogleGeminiService_gemini_api_key": gemini_api_key,
         "output_format": "markdown",
         "disable_tqdm": True,
     }
     if page_range is not None:
         opts["page_range"] = page_range
     return ConfigParser(opts).generate_config_dict()
+
+
+def _verify_gemini_credentials(api_key: str, model: str) -> None:
+    """Probe the Gemini API to confirm the key and model are usable.
+
+    Raises ValueError with a user-actionable message if the key is missing,
+    invalid, or the model name is unrecognized. Catches any client error so
+    that a misconfigured run fails before marker loads multi-GB of weights.
+    """
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is not set")
+    from google import genai
+    from google.genai.errors import APIError
+    try:
+        client = genai.Client(api_key=api_key)
+        client.models.generate_content(model=model, contents="ping")
+    except APIError as exc:
+        raise ValueError(
+            f"Gemini pre-flight failed for model {model!r}: {exc}. "
+            "Check GEMINI_API_KEY and GEMINI_MODEL_NAME in local.env.",
+        ) from exc
+    except Exception as exc:
+        raise ValueError(
+            f"Gemini pre-flight failed for model {model!r}: {exc}",
+        ) from exc
 
 
 def _translate_one(
@@ -145,7 +187,11 @@ def _translate_one(
 
     if pages is None or pages <= chunk_pages:
         config_dict = _build_config_dict(gemini_api_key, gemini_model, None)
-        rendered = PdfConverter(artifact_dict=models, config=config_dict)(str(pdf_path))
+        rendered = PdfConverter(
+            artifact_dict=models,
+            config=config_dict,
+            llm_service=_STRICT_GEMINI_SERVICE,
+        )(str(pdf_path))
         text, _, images = text_from_rendered(rendered)
         return text, images
 
@@ -160,7 +206,11 @@ def _translate_one(
     for page_range in ranges:
         start_page = int(page_range.split("-")[0])
         config_dict = _build_config_dict(gemini_api_key, gemini_model, page_range)
-        rendered = PdfConverter(artifact_dict=models, config=config_dict)(str(pdf_path))
+        rendered = PdfConverter(
+            artifact_dict=models,
+            config=config_dict,
+            llm_service=_STRICT_GEMINI_SERVICE,
+        )(str(pdf_path))
         text, _, images = text_from_rendered(rendered)
         text, images = _offset_images(text, images, start_page)
         all_texts.append(text)
@@ -221,6 +271,9 @@ def translate_collection(
         summary.skipped = summary.total
         return summary
 
+    _verify_gemini_credentials(gemini_api_key, gemini_model)
+
+    from google.genai.errors import APIError
     from marker.models import create_model_dict
 
     logger.info("Loading marker-pdf models (version %s)…", version)
@@ -241,6 +294,15 @@ def translate_collection(
             _save_output(dest_dir, text, images)
             summary.translated += 1
             logger.debug("Translated %s -> %s", sha256[:12], dest_dir)
+        except APIError as exc:
+            msg = (
+                f"Gemini LLM unavailable while translating {sha256[:12]}: {exc}. "
+                f"Aborting after {summary.translated} successful translations; "
+                f"the triggering PDF and {summary.total - summary.translated - 1} "
+                f"others will be retried on the next run."
+            )
+            logger.exception(msg)
+            raise LLMUnavailableError(msg, summary) from exc
         except Exception as exc:
             summary.failed += 1
             summary.failures.append(TranslateFailure(content_sha256=sha256, error=str(exc)))
