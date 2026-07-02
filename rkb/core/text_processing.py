@@ -2,9 +2,87 @@
 
 import hashlib
 import re
+from difflib import SequenceMatcher
 from pathlib import Path
 
 from rkb.core.models import ChunkMetadata
+
+_HEADING_RE = re.compile(r"^#{1,6}\s+(.+?)\s*$", re.MULTILINE)
+_NUMBERED_HEADING_RE = re.compile(r"^\d+(?:\.\d+)*\.?\s")
+_GENERIC_HEADINGS = frozenset(
+    {
+        "introduction",
+        "abstract",
+        "contents",
+        "table of contents",
+        "references",
+        "bibliography",
+        "acknowledgements",
+        "acknowledgments",
+        "appendix",
+        "conclusion",
+        "conclusions",
+        "summary",
+        "index",
+        "notation",
+        "preface",
+        "keywords",
+    }
+)
+
+
+def _strip_bold_markers(text: str) -> str:
+    """Remove markdown bold wrappers (``**x**`` / ``__x__``) and trim."""
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"__(.+?)__", r"\1", text)
+    return text.strip()
+
+
+def title_candidate_from_marker_markdown(content: str) -> str | None:
+    """Return a plausible paper title from marker-pdf Markdown, or None.
+
+    Uses the first markdown heading that looks like a title: bold markers and
+    surrounding whitespace are stripped, and headings that are obviously not
+    titles (numbered section headings such as ``3.1 Introduction`` or single
+    generic words such as ``Introduction`` or ``Abstract``) are skipped.
+    """
+    for match in _HEADING_RE.finditer(content):
+        heading = _strip_bold_markers(match.group(1))
+        if not heading:
+            continue
+        if _NUMBERED_HEADING_RE.match(heading):
+            continue
+        if heading.rstrip(".:").casefold() in _GENERIC_HEADINGS:
+            continue
+        return heading
+    return None
+
+
+def _normalize_title(title: str) -> str:
+    """Casefold a title and strip punctuation and redundant whitespace."""
+    title = _strip_bold_markers(title)
+    title = re.sub(r"[^\w\s]", " ", title)
+    title = re.sub(r"\s+", " ", title)
+    return title.strip().casefold()
+
+
+def titles_match(query: str, candidate: str, *, threshold: float = 0.9) -> bool:
+    """Return True if a search-result title strongly matches the query title.
+
+    Titles are normalized (casefolded, punctuation and extra whitespace
+    removed) and compared with :class:`difflib.SequenceMatcher`. A match is
+    accepted when the similarity ratio meets ``threshold`` or when one
+    normalized title fully contains the other.
+    """
+    if not query or not candidate:
+        return False
+    normalized_query = _normalize_title(query)
+    normalized_candidate = _normalize_title(candidate)
+    if not normalized_query or not normalized_candidate:
+        return False
+    if normalized_query in normalized_candidate or normalized_candidate in normalized_query:
+        return True
+    return SequenceMatcher(None, normalized_query, normalized_candidate).ratio() >= threshold
 
 
 def extract_equations(text: str) -> dict[str, any]:

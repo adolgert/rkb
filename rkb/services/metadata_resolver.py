@@ -7,6 +7,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from rkb.collection.canonical_store import find_extraction_in_dir
+from rkb.core.text_processing import title_candidate_from_marker_markdown, titles_match
 from rkb.extractors.metadata.arxiv_extractor import ArxivExtractor
 from rkb.extractors.metadata.doi_crossref import DOICrossRefExtractor
 from rkb.extractors.metadata.grobid_extractor import GrobidExtractor
@@ -24,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 _TARGET_FIELDS = ("title", "authors", "year", "abstract")
 
+# Title-page region of the Markdown used to corroborate title-search hits.
+_TITLE_PAGE_CHARS = 4000
+
 _PRIORITY_ORDER = [
     "zotero_translation",
     "grobid",
@@ -31,6 +36,8 @@ _PRIORITY_ORDER = [
     "doi_crossref",
     "arxiv",
     "xmp",
+    "semantic_scholar_title",
+    "crossref_title",
 ]
 
 _CLAUDE_SYSTEM_PROMPT = """\
@@ -38,7 +45,8 @@ You are a metadata merging assistant. Given multiple metadata extractions for th
 same academic PDF, produce a single correct merged result.
 
 Source reliability ranking (highest first): Zotero translation-server > GROBID > \
-Semantic Scholar > CrossRef > arXiv > XMP.
+Semantic Scholar > CrossRef > arXiv > XMP > title-based searches (Semantic Scholar \
+title / CrossRef title, least reliable because they are matched only by title text).
 
 Rules:
 - Prefer the highest-reliability source for each field.
@@ -165,6 +173,10 @@ class MetadataResolver:
             return sources
 
         self._extract_s2(content_sha256, sources, doi)
+
+        if self._best_field(sources, "title") is None:
+            self._extract_title_search(pdf_path, content_sha256, sources)
+
         return sources
 
     def _extract_xmp(
@@ -271,6 +283,88 @@ class MetadataResolver:
                 self._store_source(content_sha256, s2_meta)
         except Exception:
             logger.debug("S2 extraction failed")
+
+    def _extract_title_search(
+        self, pdf_path: Path, content_sha256: str, sources: dict[str, DocumentMetadata]
+    ) -> None:
+        """Seed a bibliographic title search from the marker-pdf Markdown heading.
+
+        Fires only when no identifier-based source produced a title (typically
+        pre-DOI scans). Degrades silently when the Markdown is not present yet
+        (e.g. enrich running before translate for a new file). A hit is accepted
+        only when its title strongly matches the heading AND one of its authors
+        appears in the title-page region of the Markdown — generic titles like
+        "Markov Chain Monte Carlo Methods" match many unrelated works.
+        """
+        markdown = self._markdown_text(pdf_path)
+        if not markdown:
+            return
+        candidate = title_candidate_from_marker_markdown(markdown)
+        if not candidate:
+            return
+        title_page = markdown[:_TITLE_PAGE_CHARS]
+        self._title_search_crossref(content_sha256, sources, candidate, title_page)
+        self._title_search_s2(content_sha256, sources, candidate, title_page)
+
+    def _markdown_text(self, pdf_path: Path) -> str | None:
+        """Return the marker-pdf Markdown beside the PDF, if present."""
+        try:
+            markdown_path = find_extraction_in_dir(pdf_path.parent)
+            if markdown_path is None:
+                return None
+            return markdown_path.read_text(encoding="utf-8", errors="ignore")
+        except (OSError, ValueError):
+            return None
+
+    @staticmethod
+    def _author_on_title_page(meta: DocumentMetadata, title_page: str) -> bool:
+        """Return True if an author family name appears in the title-page text."""
+        if not meta.authors:
+            return False
+        haystack = title_page.casefold()
+        for author in meta.authors:
+            parts = author.split()
+            family = parts[-1] if parts else ""
+            if len(family) > 2 and family.casefold() in haystack:
+                return True
+        return False
+
+    def _title_search_crossref(
+        self,
+        content_sha256: str,
+        sources: dict[str, DocumentMetadata],
+        candidate: str,
+        title_page: str,
+    ) -> None:
+        """Query CrossRef by title and store a validated, corroborated hit."""
+        try:
+            meta = self._crossref.search_by_title(candidate)
+            if meta.title and self._author_on_title_page(meta, title_page):
+                sources["crossref_title"] = meta
+                self._store_source(content_sha256, meta)
+        except Exception:
+            logger.debug("CrossRef title search failed")
+
+    def _title_search_s2(
+        self,
+        content_sha256: str,
+        sources: dict[str, DocumentMetadata],
+        candidate: str,
+        title_page: str,
+    ) -> None:
+        """Query Semantic Scholar by title and store a validated, corroborated hit."""
+        try:
+            meta = self._s2.extract_by_title(candidate)
+            if (
+                meta.title
+                and titles_match(candidate, meta.title)
+                and self._author_on_title_page(meta, title_page)
+            ):
+                meta.extractor = "semantic_scholar_title"
+                sources["semantic_scholar_title"] = meta
+                self._store_source(content_sha256, meta)
+        except Exception:
+            logger.debug("S2 title search failed")
 
     def _store_source(self, content_sha256: str, meta: DocumentMetadata) -> None:
         """Cache one extractor result in the catalog."""

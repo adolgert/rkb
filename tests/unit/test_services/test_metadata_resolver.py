@@ -263,6 +263,141 @@ class TestZoteroTranslation:
         mock_s2.assert_not_called()
 
 
+class TestTitleSearchFallback:
+    def test_fallback_fires_when_no_source_has_title(self, catalog):
+        resolver = MetadataResolver(catalog, use_claude_merge=False)
+
+        with (
+            patch.object(resolver._xmp, "extract_with_ids") as mock_xmp,
+            patch.object(resolver._translation, "extract") as mock_translation,
+            patch.object(resolver._grobid, "extract") as mock_grobid,
+            patch.object(resolver._crossref, "extract") as mock_cr,
+            patch.object(resolver._crossref, "search_by_title") as mock_cr_title,
+            patch.object(resolver._s2, "extract_by_title") as mock_s2,
+            patch.object(
+                resolver,
+                "_markdown_text",
+                return_value="# A Scanned Paper\n\nXavier Author\n\nBody text.",
+            ),
+        ):
+            mock_xmp.return_value = XMPResult(metadata=_meta("xmp"))
+            mock_translation.return_value = _meta("zotero_translation")
+            mock_grobid.return_value = _meta("grobid")
+            mock_cr.return_value = _meta("doi_crossref")
+            mock_cr_title.return_value = _meta(
+                "crossref_title", title="A Scanned Paper", authors=["Xavier Author"], year=1990
+            )
+            mock_s2.return_value = _meta(
+                "semantic_scholar_title", title="A Scanned Paper", authors=["Xavier Author"]
+            )
+
+            result = resolver.resolve(Path("/tmp/test.pdf"), "a" * 64)
+
+        mock_cr_title.assert_called_once_with("A Scanned Paper")
+        assert result.title == "A Scanned Paper"
+        assert "crossref_title" in result.source_extractors
+        assert "semantic_scholar_title" in result.source_extractors
+
+    def test_fallback_skipped_when_a_source_has_title(self, catalog):
+        resolver = MetadataResolver(catalog, use_claude_merge=False)
+
+        with (
+            patch.object(resolver._xmp, "extract_with_ids") as mock_xmp,
+            patch.object(resolver._translation, "extract") as mock_translation,
+            patch.object(resolver._grobid, "extract") as mock_grobid,
+            patch.object(resolver._crossref, "extract") as mock_cr,
+            patch.object(resolver._crossref, "search_by_title") as mock_cr_title,
+            patch.object(resolver._s2, "extract_by_title") as mock_s2,
+            patch.object(
+                resolver, "_markdown_text", return_value="# Ignored\n\nBody."
+            ),
+        ):
+            mock_xmp.return_value = XMPResult(metadata=_meta("xmp"))
+            mock_translation.return_value = _meta("zotero_translation")
+            mock_grobid.return_value = _meta("grobid", title="GROBID Title")
+            mock_cr.return_value = _meta("doi_crossref")
+            mock_s2.return_value = _meta("semantic_scholar")
+
+            result = resolver.resolve(Path("/tmp/test.pdf"), "a" * 64)
+
+        mock_cr_title.assert_not_called()
+        assert result.title == "GROBID Title"
+
+    def test_hit_without_author_on_title_page_is_rejected(self, catalog):
+        resolver = MetadataResolver(catalog, use_claude_merge=False)
+
+        with (
+            patch.object(resolver._xmp, "extract_with_ids") as mock_xmp,
+            patch.object(resolver._translation, "extract") as mock_translation,
+            patch.object(resolver._grobid, "extract") as mock_grobid,
+            patch.object(resolver._crossref, "extract") as mock_cr,
+            patch.object(resolver._crossref, "search_by_title") as mock_cr_title,
+            patch.object(resolver._s2, "extract_by_title") as mock_s2,
+            patch.object(
+                resolver,
+                "_markdown_text",
+                return_value="# Markov Chain Monte Carlo Methods\n\nNo author here.",
+            ),
+        ):
+            mock_xmp.return_value = XMPResult(metadata=_meta("xmp"))
+            mock_translation.return_value = _meta("zotero_translation")
+            mock_grobid.return_value = _meta("grobid")
+            mock_cr.return_value = _meta("doi_crossref")
+            # Same generic title, but the claimed author never appears on the
+            # title page — must be rejected as a probable different work.
+            mock_cr_title.return_value = _meta(
+                "crossref_title",
+                title="Markov Chain Monte Carlo Methods",
+                authors=["Christian P. Robert"],
+            )
+            mock_s2.return_value = _meta(
+                "semantic_scholar_title",
+                title="Markov Chain Monte Carlo Methods",
+                authors=["Christian P. Robert"],
+            )
+
+            result = resolver.resolve(Path("/tmp/test.pdf"), "a" * 64)
+
+        assert result.title is None
+        assert "crossref_title" not in result.source_extractors
+
+    def test_title_candidate_reads_markdown_from_canonical_layout(self, catalog, tmp_path):
+        """Unmocked path lookup against a real canonical hash-dir layout."""
+        sha = "a" * 64
+        hash_dir = tmp_path / "library" / "sha256" / "aa" / "aa" / sha
+        extraction_dir = hash_dir / "extractions" / "marker-pdf-1.10.2"
+        extraction_dir.mkdir(parents=True)
+        (extraction_dir / "extracted.md").write_text("# A Real Scanned Paper Title\n\nBody.")
+        pdf_path = hash_dir / "Scanned.pdf"
+        pdf_path.write_bytes(b"pdf")
+
+        resolver = MetadataResolver(catalog, use_claude_merge=False)
+        markdown = resolver._markdown_text(pdf_path)
+        assert markdown is not None
+        from rkb.core.text_processing import title_candidate_from_marker_markdown
+        assert title_candidate_from_marker_markdown(markdown) == "A Real Scanned Paper Title"
+
+    def test_missing_markdown_degrades_silently(self, catalog):
+        resolver = MetadataResolver(catalog, use_claude_merge=False)
+
+        with (
+            patch.object(resolver._xmp, "extract_with_ids") as mock_xmp,
+            patch.object(resolver._translation, "extract") as mock_translation,
+            patch.object(resolver._grobid, "extract") as mock_grobid,
+            patch.object(resolver._crossref, "extract") as mock_cr,
+            patch.object(resolver._crossref, "search_by_title") as mock_cr_title,
+        ):
+            mock_xmp.return_value = XMPResult(metadata=_meta("xmp"))
+            mock_translation.return_value = _meta("zotero_translation")
+            mock_grobid.return_value = _meta("grobid")
+            mock_cr.return_value = _meta("doi_crossref")
+
+            result = resolver.resolve(Path("/tmp/test.pdf"), "a" * 64)
+
+        mock_cr_title.assert_not_called()
+        assert result.title is None
+
+
 class TestResolveBatch:
     def test_batch_resolve(self, catalog, resolver):
         catalog.set_resolved_metadata("a" * 64, title="Batch Title")

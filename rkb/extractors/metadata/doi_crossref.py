@@ -6,8 +6,13 @@ from pathlib import Path
 import pymupdf
 import requests
 
+from rkb.core.text_processing import titles_match
 from rkb.extractors.metadata.base import MetadataExtractor
 from rkb.extractors.metadata.models import DocumentMetadata
+
+_CROSSREF_TITLE_SOURCE = "crossref_title"
+_CROSSREF_SEARCH_URL = "https://api.crossref.org/works"
+_CROSSREF_USER_AGENT = "rkb (mailto:claude@dolgert.com)"
 
 
 class CrossRefUnavailableError(Exception):
@@ -93,49 +98,78 @@ class DOICrossRefExtractor(MetadataExtractor):
 
             data = response.json()
             message = data.get("message", {})
-
-            # Extract title
-            title = None
-            if message.get("title"):
-                title = message["title"][0]
-
-            # Extract authors
-            authors = []
-            for author in message.get("author", []):
-                given = author.get("given", "")
-                family = author.get("family", "")
-                if family:
-                    name = f"{given} {family}".strip() if given else family
-                    authors.append(name)
-
-            # Extract year
-            year = None
-            if "published" in message:
-                date_parts = message["published"].get("date-parts", [[]])[0]
-                if date_parts:
-                    year = date_parts[0]
-            elif "published-print" in message:
-                date_parts = message["published-print"].get("date-parts", [[]])[0]
-                if date_parts:
-                    year = date_parts[0]
-
-            # Extract journal/venue
-            journal = None
-            if message.get("container-title"):
-                journal = message["container-title"][0]
-
-            # Extract document type
-            doc_type = message.get("type")
-
-            return DocumentMetadata(
-                doc_type=doc_type,
-                title=title,
-                authors=authors or None,
-                year=year,
-                journal=journal,
-                page_count=None,
-                extractor=self.name,
-            )
+            return self._parse_message(message, self.name)
 
         except Exception:
             return DocumentMetadata(extractor=self.name)
+
+    def search_by_title(self, title: str) -> DocumentMetadata:
+        """Search CrossRef by bibliographic title with strict validation.
+
+        A hit is accepted only when its title strongly matches the query title.
+        On rate limiting (429/503) or any error, empty metadata is returned so
+        the resolver keeps going and a later re-run can retry.
+
+        Args:
+            title: Candidate title to search for
+
+        Returns:
+            DocumentMetadata for a validated match, else empty metadata
+        """
+        try:
+            response = requests.get(
+                _CROSSREF_SEARCH_URL,
+                params={"query.bibliographic": title, "rows": "3"},
+                headers={"User-Agent": _CROSSREF_USER_AGENT},
+                timeout=10,
+            )
+            if response.status_code != 200:
+                return DocumentMetadata(extractor=_CROSSREF_TITLE_SOURCE)
+
+            items = response.json().get("message", {}).get("items", [])
+            for item in items:
+                meta = self._parse_message(item, _CROSSREF_TITLE_SOURCE)
+                if meta.title and titles_match(title, meta.title):
+                    return meta
+            return DocumentMetadata(extractor=_CROSSREF_TITLE_SOURCE)
+
+        except Exception:
+            return DocumentMetadata(extractor=_CROSSREF_TITLE_SOURCE)
+
+    def _parse_message(self, message: dict, extractor: str) -> DocumentMetadata:
+        """Convert a CrossRef work message into DocumentMetadata."""
+        title = None
+        if message.get("title"):
+            title = message["title"][0]
+
+        authors = []
+        for author in message.get("author", []):
+            given = author.get("given", "")
+            family = author.get("family", "")
+            if family:
+                name = f"{given} {family}".strip() if given else family
+                authors.append(name)
+
+        year = None
+        if "published" in message:
+            date_parts = message["published"].get("date-parts", [[]])[0]
+            if date_parts:
+                year = date_parts[0]
+        elif "published-print" in message:
+            date_parts = message["published-print"].get("date-parts", [[]])[0]
+            if date_parts:
+                year = date_parts[0]
+
+        journal = None
+        if message.get("container-title"):
+            journal = message["container-title"][0]
+
+        return DocumentMetadata(
+            doc_type=message.get("type"),
+            title=title,
+            authors=authors or None,
+            year=year,
+            journal=journal,
+            page_count=None,
+            extractor=extractor,
+        )

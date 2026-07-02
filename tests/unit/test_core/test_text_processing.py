@@ -15,6 +15,8 @@ from rkb.core.text_processing import (
     extract_equations,
     hash_file,
     pages_from_marker_markdown,
+    title_candidate_from_marker_markdown,
+    titles_match,
 )
 
 
@@ -364,3 +366,82 @@ class TestPagesFromMarkerMarkdown:
 
     def test_plain_text_yields_nothing(self):
         assert pages_from_marker_markdown("No artifacts here on page 7.") == []
+
+
+class TestTitleCandidateFromMarkerMarkdown:
+    """Tests for extracting a title candidate from marker-pdf Markdown."""
+
+    def test_first_heading_is_title(self):
+        content = "# Markov Chain Monte Carlo Methods\n\nBody text here."
+        assert (
+            title_candidate_from_marker_markdown(content)
+            == "Markov Chain Monte Carlo Methods"
+        )
+
+    def test_strips_bold_markers(self):
+        content = "# **A general relative risk model**\n\nText."
+        assert (
+            title_candidate_from_marker_markdown(content)
+            == "A general relative risk model"
+        )
+
+    def test_skips_numbered_section_headings(self):
+        content = "## 3.1 Introduction\n\n# A Real Title\n\nText."
+        assert title_candidate_from_marker_markdown(content) == "A Real Title"
+
+    def test_skips_generic_single_word_headings(self):
+        content = "# Introduction\n\n## Abstract\n\n# The Actual Paper Title\n"
+        assert (
+            title_candidate_from_marker_markdown(content) == "The Actual Paper Title"
+        )
+
+    def test_generic_heading_is_case_insensitive(self):
+        content = "# CONTENTS\n\n# Bayesian Nonparametrics\n"
+        assert (
+            title_candidate_from_marker_markdown(content) == "Bayesian Nonparametrics"
+        )
+
+    def test_returns_none_when_no_headings(self):
+        assert title_candidate_from_marker_markdown("Just body text, no heading.") is None
+
+    def test_returns_none_when_only_generic_headings(self):
+        content = "# Introduction\n\n## 2 Methods\n\n# References\n"
+        assert title_candidate_from_marker_markdown(content) is None
+
+
+class TestTitlesMatch:
+    """Tests for strict title validation."""
+
+    def test_exact_match(self):
+        assert titles_match("Deep Learning", "Deep Learning") is True
+
+    def test_punctuation_and_case_insensitive(self):
+        assert titles_match("Deep, Learning!", "deep learning") is True
+
+    def test_containment_accepted(self):
+        assert titles_match(
+            "A general relative risk model",
+            "A general relative risk model for case-control studies",
+        ) is True
+
+    def test_near_miss_rejected(self):
+        assert (
+            titles_match(
+                "Markov Chain Monte Carlo Methods",
+                "Quasi-Monte Carlo Methods in Finance",
+            )
+            is False
+        )
+
+    def test_unrelated_rejected(self):
+        assert (
+            titles_match(
+                "A general relative risk model",
+                "Deep learning for image recognition",
+            )
+            is False
+        )
+
+    def test_empty_inputs_rejected(self):
+        assert titles_match("", "Something") is False
+        assert titles_match("Something", "") is False
