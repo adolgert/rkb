@@ -298,6 +298,36 @@ class Catalog:
         ).fetchall()
         return [row["content_sha256"] for row in rows]
 
+    def list_recent_canonical_files(self, *, limit: int = 20) -> list[dict]:
+        """Return recently ingested files with resolved metadata, newest first."""
+        safe_limit = max(1, int(limit))
+        rows = self._connect().execute(
+            """
+                SELECT
+                    c.content_sha256,
+                    c.canonical_path,
+                    c.display_name,
+                    c.page_count,
+                    c.ingested_at,
+                    m.title,
+                    m.authors_json,
+                    m.year,
+                    m.journal
+                FROM canonical_files AS c
+                LEFT JOIN metadata_resolved AS m
+                    ON m.content_sha256 = c.content_sha256
+                ORDER BY c.ingested_at DESC, c.rowid DESC
+                LIMIT ?
+            """,
+            (safe_limit,),
+        ).fetchall()
+        result = []
+        for row in rows:
+            d = dict(row)
+            d["authors"] = json.loads(d["authors_json"]) if d.get("authors_json") else None
+            result.append(d)
+        return result
+
     def get_zotero_linked_count(self) -> int:
         """Return number of canonical files successfully linked in Zotero."""
         row = self._connect().execute(

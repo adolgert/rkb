@@ -30,6 +30,26 @@ def extract_equations(text: str) -> dict[str, any]:
     }
 
 
+# Marker-pdf embeds 0-based page indices in image filenames
+# (_page_12_Picture_3.jpeg) and in span anchors (<span id="page-12-0">).
+# Citation links (](#page-N-M)) point at *other* pages and must not match.
+_MARKER_PAGE_REF = re.compile(r'_page_(\d+)_|id="page-(\d+)-')
+
+
+def pages_from_marker_markdown(content: str) -> list[int]:
+    """Return sorted 1-based page numbers that a marker-pdf Markdown snippet lies on.
+
+    Page positions are recovered from artifacts marker leaves in the text
+    (image filenames and span anchors), so the result is approximate: it is
+    empty for passages without such artifacts.
+    """
+    pages = {
+        int(match.group(1) or match.group(2)) + 1
+        for match in _MARKER_PAGE_REF.finditer(content)
+    }
+    return sorted(pages)
+
+
 def chunk_text_by_pages(content: str, max_chunk_size: int = 2000) -> list[tuple[str, list[int]]]:
     """Split markdown content into page-based chunks with page tracking.
 
@@ -135,7 +155,8 @@ def _merge_small_chunks(
     pending_text = ""
     pending_hierarchy: list[str] = []
 
-    for text, hierarchy in chunks:
+    for chunk_text, hierarchy in chunks:
+        text = chunk_text
         if pending_text:
             # Prepend the pending small chunk to this one
             text = pending_text + "\n\n" + text

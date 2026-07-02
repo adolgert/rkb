@@ -9,10 +9,10 @@ import pytest
 from rkb.collection.catalog import Catalog
 from rkb.extractors.metadata.models import DocumentMetadata
 from rkb.extractors.metadata.xmp import XMPResult
-from rkb.services.metadata_resolver import MetadataResolver, ResolutionResult
+from rkb.services.metadata_resolver import MetadataResolver
 
 
-@pytest.fixture()
+@pytest.fixture
 def catalog():
     cat = Catalog(db_path=":memory:")  # type: ignore[arg-type]
     cat.initialize()
@@ -27,7 +27,7 @@ def catalog():
     return cat
 
 
-@pytest.fixture()
+@pytest.fixture
 def resolver(catalog):
     return MetadataResolver(catalog, use_claude_merge=False)
 

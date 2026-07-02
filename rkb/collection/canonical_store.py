@@ -27,6 +27,18 @@ def canonical_dir(library_root: Path, content_sha256: str) -> Path:
     return library_root / "sha256" / normalized[:2] / normalized[2:4] / normalized
 
 
+def find_extraction(library_root: Path, content_sha256: str) -> Path | None:
+    """Return the newest Markdown extraction for a document, if any.
+
+    Prefers marker-pdf extractions over legacy nougat ones.
+    """
+    hash_dir = canonical_dir(library_root, content_sha256)
+    candidates = sorted(hash_dir.glob("extractions/marker-pdf-*/extracted.md"))
+    if not candidates:
+        candidates = sorted(hash_dir.glob("extractions/nougat-ocr-*/extracted.mmd"))
+    return candidates[-1] if candidates else None
+
+
 def _existing_pdf(hash_dir: Path) -> Path | None:
     pdf_files = sorted(
         path for path in hash_dir.iterdir() if path.is_file() and path.suffix == ".pdf"

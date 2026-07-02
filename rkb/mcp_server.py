@@ -14,14 +14,16 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass, field
+from urllib.parse import quote
 
 from fastmcp import FastMCP
 
 from rkb.api import KnowledgeBase
-from rkb.collection.canonical_store import canonical_dir
+from rkb.collection.canonical_store import canonical_dir, find_extraction
 from rkb.collection.catalog import Catalog
 from rkb.collection.config import CollectionConfig
 from rkb.core.chunk_store import ChunkStore
+from rkb.core.text_processing import pages_from_marker_markdown
 
 LOGGER = logging.getLogger("rkb.mcp_server")
 
@@ -42,6 +44,15 @@ class SearchHit:
         chunk_cnt: Number of Markdown chunks indexed for search.
         page_cnt: Number of pages in the PDF. May be None.
         abstract: Abstract text. May be empty if not extracted.
+        best_chunk: Text of the chunk that best matches the query. Judge
+            relevance from this before reading the document.
+        section: Section heading of best_chunk, when known.
+        markdown_path: Path to the full Markdown extraction of the document.
+            Callers with filesystem access should read this file directly
+            instead of paging through read_document. None if not translated.
+        pdf_link: file:// URL of the source PDF, anchored to the page of
+            best_chunk when derivable (approximate). Use it to cite sources
+            so the user can jump to the page.
     """
 
     doc_id: str
@@ -51,6 +62,10 @@ class SearchHit:
     chunk_cnt: int | None
     page_cnt: int | None
     abstract: str
+    best_chunk: str = ""
+    section: str | None = None
+    markdown_path: str | None = None
+    pdf_link: str | None = None
 
 
 @dataclass
@@ -64,6 +79,9 @@ class Chunk:
         content: The text that makes up this chunk.
         similarity: Relevance score in [0, 1]. Higher is better. None when
             reading sequentially rather than by relevance.
+        pdf_link: file:// URL of the source PDF, anchored to the page this
+            chunk starts on when derivable (approximate). Use it to cite
+            quotes from this chunk so the user can jump to the page.
     """
 
     doc_id: str
@@ -71,6 +89,7 @@ class Chunk:
     chunk_cnt: int
     content: str
     similarity: float | None
+    pdf_link: str | None = None
 
 
 @dataclass
@@ -87,6 +106,10 @@ class DocumentInfo:
         page_cnt: Number of pages in the PDF. None if unavailable.
         chunk_cnt: Number of Markdown chunks indexed for search.
         dir_path: Path to the canonical directory with PDF, Markdown, and images.
+        markdown_path: Path to the full Markdown extraction of the document.
+            Callers with filesystem access should read this file directly
+            instead of paging through read_document. None if not translated.
+        pdf_link: file:// URL of the source PDF.
     """
 
     doc_id: str
@@ -98,6 +121,8 @@ class DocumentInfo:
     page_cnt: int | None = None
     chunk_cnt: int = 0
     dir_path: str = ""
+    markdown_path: str | None = None
+    pdf_link: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +168,24 @@ def _resolved_meta(doc_id: str) -> dict:
     return meta if meta is not None else {}
 
 
+def _markdown_path(doc_id: str) -> str | None:
+    """Return the path to the document's Markdown extraction, if any."""
+    extraction = find_extraction(_config.library_root, doc_id)
+    return str(extraction) if extraction is not None else None
+
+
+def _pdf_link(canonical_path: str | None, content: str = "") -> str | None:
+    """Return a file:// URL for a PDF, page-anchored from marker artifacts in content."""
+    if not canonical_path:
+        return None
+    anchor = ""
+    if content:
+        pages = pages_from_marker_markdown(content)
+        if pages:
+            anchor = f"#page={pages[0]}"
+    return f"file://{quote(canonical_path, safe='/')}{anchor}"
+
+
 # ---------------------------------------------------------------------------
 # MCP tools
 # ---------------------------------------------------------------------------
@@ -180,6 +223,8 @@ def search_knowledge_base(query: str, mode: str, max_results: int) -> list[Searc
         # Chunk count: ChunkStore is the authoritative source.
         chunk_cnt_int: int | None = _chunks.get_chunk_count(doc_id) or None
 
+        canonical_path = catalog_row.get("canonical_path") if catalog_row else None
+
         results.append(
             SearchHit(
                 doc_id=doc_id,
@@ -189,6 +234,10 @@ def search_knowledge_base(query: str, mode: str, max_results: int) -> list[Searc
                 chunk_cnt=chunk_cnt_int,
                 page_cnt=page_cnt,
                 abstract=abstract,
+                best_chunk=hit.best_chunk,
+                section=hit.section,
+                markdown_path=_markdown_path(doc_id),
+                pdf_link=_pdf_link(canonical_path, hit.best_chunk),
             )
         )
     return results
@@ -213,6 +262,8 @@ def read_document(doc_id: str, chunk_start: int, chunk_finish: int) -> list[Chun
     """
     raw_chunks = _chunks.get_chunks(doc_id, chunk_start, chunk_finish)
     chunk_cnt = _chunks.get_chunk_count(doc_id)
+    catalog_row = _get_catalog().get_canonical_file(doc_id)
+    canonical_path = catalog_row.get("canonical_path") if catalog_row else None
     return [
         Chunk(
             doc_id=doc_id,
@@ -220,6 +271,7 @@ def read_document(doc_id: str, chunk_start: int, chunk_finish: int) -> list[Chun
             chunk_cnt=chunk_cnt,
             content=content,
             similarity=None,
+            pdf_link=_pdf_link(canonical_path, content),
         )
         for idx, content in raw_chunks
     ]
@@ -243,6 +295,8 @@ def search_within_document(doc_id: str, query: str, max_chunks: int) -> list[Chu
         query=query, doc_id=doc_id, n_results=max_chunks
     )
     chunk_cnt = _chunks.get_chunk_count(doc_id)
+    catalog_row = _get_catalog().get_canonical_file(doc_id)
+    canonical_path = catalog_row.get("canonical_path") if catalog_row else None
     chunks: list[Chunk] = []
     for cr in result.chunk_results:
         chunk_idx = cr.metadata.get("chunk_index", 0)
@@ -253,6 +307,7 @@ def search_within_document(doc_id: str, query: str, max_chunks: int) -> list[Chu
                 chunk_cnt=chunk_cnt,
                 content=cr.content,
                 similarity=cr.similarity,
+                pdf_link=_pdf_link(canonical_path, cr.content),
             )
         )
     return chunks
@@ -287,6 +342,7 @@ def get_document(doc_id: str) -> DocumentInfo:
 
     chunk_cnt = _chunks.get_chunk_count(doc_id)
     dir_path = str(canonical_dir(_config.library_root, doc_id))
+    canonical_path = catalog_row.get("canonical_path") if catalog_row else None
 
     return DocumentInfo(
         doc_id=doc_id,
@@ -298,6 +354,8 @@ def get_document(doc_id: str) -> DocumentInfo:
         page_cnt=page_cnt,
         chunk_cnt=chunk_cnt,
         dir_path=dir_path,
+        markdown_path=_markdown_path(doc_id),
+        pdf_link=_pdf_link(canonical_path),
     )
 
 

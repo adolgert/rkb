@@ -14,6 +14,7 @@ from rkb.core.text_processing import (
     extract_doi,
     extract_equations,
     hash_file,
+    pages_from_marker_markdown,
 )
 
 
@@ -337,3 +338,29 @@ class TestCleanExtractedText:
         cleaned = clean_extracted_text(text)
 
         assert cleaned == ""
+
+
+class TestPagesFromMarkerMarkdown:
+    """Tests for recovering page numbers from marker-pdf artifacts."""
+
+    def test_image_reference_yields_one_based_page(self):
+        content = "Some text\n![](_page_0_Picture_0.jpeg)\nmore text"
+        assert pages_from_marker_markdown(content) == [1]
+
+    def test_span_anchor_yields_one_based_page(self):
+        content = 'Before <span id="page-14-2"></span> after'
+        assert pages_from_marker_markdown(content) == [15]
+
+    def test_citation_links_are_ignored(self):
+        content = "as shown by [\\[1\\]](#page-14-0) in prior work"
+        assert pages_from_marker_markdown(content) == []
+
+    def test_multiple_references_sorted_and_deduplicated(self):
+        content = (
+            '![](_page_5_Figure_1.jpeg) <span id="page-3-0"></span>'
+            "![](_page_5_Picture_2.jpeg)"
+        )
+        assert pages_from_marker_markdown(content) == [4, 6]
+
+    def test_plain_text_yields_nothing(self):
+        assert pages_from_marker_markdown("No artifacts here on page 7.") == []

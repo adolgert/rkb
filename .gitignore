@@ -248,3 +248,6 @@ Icon?
 # Pipfile.lock
 # poetry.lock
 # requirements.lock
+# Secrets — live API keys, never commit
+local.env
+Gemini key.txt

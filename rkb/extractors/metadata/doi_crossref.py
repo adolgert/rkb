@@ -130,7 +130,7 @@ class DOICrossRefExtractor(MetadataExtractor):
             return DocumentMetadata(
                 doc_type=doc_type,
                 title=title,
-                authors=authors if authors else None,
+                authors=authors or None,
                 year=year,
                 journal=journal,
                 page_count=None,

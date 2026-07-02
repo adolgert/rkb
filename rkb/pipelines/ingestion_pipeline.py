@@ -89,7 +89,7 @@ class IngestionPipeline:
         self.interrupted = True
         # Don't exit immediately - let pipeline save state
 
-    def process_single_document(
+    def process_single_document(  # noqa: PLR0912
         self,
         source_path: Path,
         force_reprocess: bool = False,

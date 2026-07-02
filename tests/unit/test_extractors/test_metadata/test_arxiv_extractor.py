@@ -1,7 +1,7 @@
 """Tests for arXiv metadata extractor."""
 
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -22,8 +22,8 @@ def test_id_from_filename_no_match():
     assert ArxivExtractor.id_from_filename("my_paper.pdf") is None
 
 
-@pytest.fixture()
-def _mock_arxiv_module():
+@pytest.fixture
+def mock_arxiv_module():
     """Inject a fake `arxiv` module into sys.modules."""
     mock_mod = MagicMock()
     original = sys.modules.get("arxiv")
@@ -35,13 +35,13 @@ def _mock_arxiv_module():
         sys.modules["arxiv"] = original
 
 
-def test_extract_by_id_success(_mock_arxiv_module):
+def test_extract_by_id_success(mock_arxiv_module):
     """Successful arXiv API lookup."""
-    mock_arxiv = _mock_arxiv_module
+    mock_arxiv = mock_arxiv_module
     paper = SimpleNamespace(
         title="Test Paper",
         authors=[SimpleNamespace(name="A. Author"), SimpleNamespace(name="B. Writer")],
-        published=datetime(2023, 1, 15),
+        published=datetime(2023, 1, 15, tzinfo=UTC),
         summary="This is the abstract.",
         categories=["cs.AI", "cs.LG"],
     )
@@ -60,9 +60,9 @@ def test_extract_by_id_success(_mock_arxiv_module):
     assert meta.extractor == "arxiv"
 
 
-def test_extract_by_id_no_results(_mock_arxiv_module):
+def test_extract_by_id_no_results(mock_arxiv_module):
     """arXiv returns no results."""
-    mock_arxiv = _mock_arxiv_module
+    mock_arxiv = mock_arxiv_module
     mock_client = MagicMock()
     mock_client.results.return_value = []
     mock_arxiv.Client.return_value = mock_client
@@ -75,9 +75,9 @@ def test_extract_by_id_no_results(_mock_arxiv_module):
     assert meta.extractor == "arxiv"
 
 
-def test_extract_by_id_exception(_mock_arxiv_module):
+def test_extract_by_id_exception(mock_arxiv_module):
     """arXiv API raises exception — returns empty metadata."""
-    mock_arxiv = _mock_arxiv_module
+    mock_arxiv = mock_arxiv_module
     mock_arxiv.Client.side_effect = Exception("network error")
 
     ext = ArxivExtractor()

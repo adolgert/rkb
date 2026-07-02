@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _make_fake_model(dim: int = 768) -> MagicMock:
@@ -18,7 +20,7 @@ def _make_fake_model(dim: int = 768) -> MagicMock:
     return mock_model
 
 
-def _make_specter2(tmpdir: Path, **kwargs: Any):  # noqa: ANN202
+def _make_specter2(tmpdir: Path, **kwargs: object):  # noqa: ANN202
     """Helper: instantiate Specter2Embedder with a temp db_path."""
     from rkb.embedders.specter2_embedder import Specter2Embedder
 
@@ -71,7 +73,7 @@ def test_embed_returns_correct_vector_length(tmp_path: Path) -> None:
     captured: dict[str, Any] = {}
     mock_collection = MagicMock()
 
-    def _capture_add(**kwargs: Any) -> None:
+    def _capture_add(**kwargs: object) -> None:
         captured.update(kwargs)
 
     mock_collection.add.side_effect = _capture_add

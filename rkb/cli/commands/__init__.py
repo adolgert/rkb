@@ -4,8 +4,10 @@
 from . import (
     documents_cmd,
     enrich_cmd,
+    import_cmd,
     index_cmd,
     ingest_cmd,
+    recent_cmd,
     rectify_cmd,
     remove_cmd,
     search_cmd,
@@ -18,8 +20,10 @@ from . import (
 __all__ = [
     "documents_cmd",
     "enrich_cmd",
+    "import_cmd",
     "index_cmd",
     "ingest_cmd",
+    "recent_cmd",
     "rectify_cmd",
     "remove_cmd",
     "search_cmd",

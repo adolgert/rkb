@@ -53,7 +53,7 @@ Our approach details.
 def test_long_section_is_sub_chunked_with_heading_prepended() -> None:
     """A section that exceeds max_chunk_size is split; heading prepended."""
     para = "Word " * 100  # ~500 chars per paragraph
-    content = f"# Long Section\n\n" + "\n\n".join([para] * 10)
+    content = "# Long Section\n\n" + "\n\n".join([para] * 10)
     # 10 * ~500 = ~5000 chars, clearly exceeds default 3000
     chunks = chunk_text_by_sections(content, max_chunk_size=1500)
     # Should have produced multiple sub-chunks
